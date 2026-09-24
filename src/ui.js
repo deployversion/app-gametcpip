@@ -126,6 +126,11 @@ export class UI {
     this.toastEl.classList.add('show');
   }
 
+  setAttractCaption(text) {
+    const el = $('#attract-caption');
+    if (el.textContent !== text) el.textContent = text;
+  }
+
   hideIntro() {
     $('#intro').hidden = true;
     $('#hud').hidden = false;

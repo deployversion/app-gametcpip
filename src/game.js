@@ -15,6 +15,7 @@ import { Particles } from './particles.js';
 import { RouteHologram } from './hologram.js';
 import { TouchControls } from './touch.js';
 import { AdaptiveQuality, TIERS } from './perf.js';
+import { Flythrough } from './attract.js';
 
 const CONFETTI = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffd166', '#ffffff'];
 
@@ -97,7 +98,12 @@ export class Game {
     this.after = null;
 
     this.placeAt(SPAWN.sender);
-    this.snapCamera();
+    this.flythrough = new Flythrough();
+    this.attractCam = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
+    this.cinematicCam = this.attractCam;
+    this.stepAttract(0);
+    this.camera.position.copy(this.attractCam.pos);
+    this.cam.target.copy(this.attractCam.look);
     this.ui.renderPacket(this.state.packet);
     this.ui.setScore(0, MAX_SCORE);
     this.bindInput();
@@ -210,8 +216,17 @@ export class Game {
     return this.state.explore ? undefined : STATIONS[this.state.stationIndex];
   }
 
+  // Intro backdrop: glide over the world while the start card is shown.
+  stepAttract(dt) {
+    const { pos, look, caption } = this.flythrough.step(dt);
+    this.attractCam.pos.copy(pos);
+    this.attractCam.look.copy(look);
+    this.ui.setAttractCaption(caption);
+  }
+
   start() {
     sfx.unlock();
+    this.cinematicCam = null;
     this.ui.hideIntro();
     this.state.mode = 'walk';
     this.state.startedAt = performance.now();
@@ -875,6 +890,8 @@ export class Game {
     this.hologram.update(dt, this.time);
     if (this.state.mode === 'walk') this.walk(dt);
     else this.ui.showPrompt(null);
+    if (this.state.mode === 'intro') this.stepAttract(dt);
+    else sfx.setZone(this.layerAt(this.packet.position.x));
     this.touch.setVisible(this.state.mode === 'walk' && !this.ui.glossaryOpen);
     this.packet.update(dt, this.time, this.moveDir);
     this.world.update(this.time, dt);

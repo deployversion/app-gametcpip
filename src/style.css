@@ -235,3 +235,12 @@ body.touch.panel-open #touch { display: none; }
 .loader-packet span:nth-child(3) { border-color: #35d07f; animation-delay: .6s; }
 .loader-packet span:nth-child(4) { border-color: #3d9bff; animation-delay: .9s; }
 @keyframes wrap { 0%, 100% { transform: scale(.35) rotate(0); opacity: .2; } 50% { transform: scale(1) rotate(45deg); opacity: 1; } }
+
+/* ------------------------------------------------------------ attract mode */
+#intro { background: radial-gradient(ellipse at center, rgba(7,11,34,.35), rgba(7,11,34,.8) 75%); }
+#attract-caption {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); max-width: 92vw;
+  padding: 6px 14px; border-radius: 999px; font-size: .9rem; letter-spacing: .02em; text-align: center;
+  color: #bfe9ff; background: rgba(7,11,34,.55); border: 1px solid rgba(75,225,255,.3);
+}
+#attract-caption:empty { display: none; }
