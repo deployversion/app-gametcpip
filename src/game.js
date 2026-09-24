@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { STATIONS, ROUTES, LAYERS } from './content.js';
 import {
-  buildWorld, heightAt, nodePosition, PATH_HALF_WIDTH, SIDE_BOUNDS, SPAWN, NETWORK_EDGE, GATE_X,
+  buildWorld, heightAt, nodePosition, EXPLORE_HALF_WIDTH, SIDE_BOUNDS, SPAWN, NETWORK_EDGE, GATE_X,
 } from './world.js';
 import { PacketAvatar } from './packet.js';
 import { UI } from './ui.js';
@@ -12,6 +12,8 @@ import { RouterRush } from './rush.js';
 
 const BEST_KEY = 'packetquest.bestScore';
 const ORB_RADIUS = 1.8;
+const CHEST_RADIUS = 2.4;
+const JUMP_TIME = 0.6;
 
 const WALK_SPEED = 12;
 const HOVER = 1.4;
@@ -39,6 +41,7 @@ export class Game {
       onRestart: () => window.location.reload(),
       onInteract: () => this.tryInteract(),
       onRush: (from) => this.startRush(from),
+      onTime: () => this.cycleTime(),
     });
     this.rush = new RouterRush({
       onExit: () => this.exitRush(),
@@ -420,6 +423,12 @@ export class Game {
       if (k === 'escape') this.ui.toggleGlossary(false);
       if (this.ui.glossaryOpen) return;
       if (k === 'e' || k === 'enter') this.tryInteract();
+      if (k === 't' && this.state.mode !== 'rush') this.cycleTime();
+      if (k === ' ' && this.state.mode === 'walk') {
+        if (!this.jumpTimer) sfx.jump();
+        this.jumpTimer = JUMP_TIME;
+        e.preventDefault();
+      }
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
         this.keys.add(k);
         this.moveTarget = null;
@@ -471,6 +480,7 @@ export class Game {
   // ------------------------------------------------------------- movement
   placeAt(v) {
     this.packet.position.set(v.x, heightAt(v.x) + HOVER, v.z);
+    this.feet = null;
   }
 
   walkBounds() {
@@ -504,12 +514,36 @@ export class Game {
     if (input.lengthSq() > 0) input.normalize().multiplyScalar(WALK_SPEED * dt);
     this.moveDir = input.clone();
 
+    const ground = this.world.ground;
+    if (this.feet == null) this.feet = ground.terrain(p.x, p.z);
     const [minX, maxX] = this.walkBounds();
     const nx = THREE.MathUtils.clamp(p.x + input.x, minX, maxX);
-    const nz = THREE.MathUtils.clamp(p.z + input.z, -PATH_HALF_WIDTH, PATH_HALF_WIDTH);
-    if (this.moveTarget && nx === p.x && nz === p.z) this.moveTarget = null;
-    p.x = nx;
-    p.z = nz;
+    const nz = THREE.MathUtils.clamp(p.z + input.z, -EXPLORE_HALF_WIDTH, EXPLORE_HALF_WIDTH);
+    // Block-world movement: climb up to two blocks, drop down any height,
+    // slide along walls and never walk into the sea.
+    const dir = input.clone().normalize();
+    const tryMove = (x, z) => {
+      const maxUp = this.jumpTimer > 0 ? 4 : 2;
+      const g = ground.step(x, z, this.feet, maxUp);
+      if (g === null) return null;
+      const probe = ground.step(x + dir.x * 0.45, z + dir.z * 0.45, this.feet, maxUp);
+      return probe === null ? null : g;
+    };
+    let moved = false;
+    if (input.lengthSq() > 0) {
+      for (const [x, z] of [[nx, nz], [nx, p.z], [p.x, nz]]) {
+        if (x === p.x && z === p.z) continue;
+        const g = tryMove(x, z);
+        if (g !== null) {
+          p.x = x;
+          p.z = z;
+          this.feet = g;
+          moved = true;
+          break;
+        }
+      }
+    }
+    if (this.moveTarget && !moved) this.moveTarget = null;
 
     // keep out of the pedestals
     for (const s of this.world.stations.values()) {
@@ -521,10 +555,15 @@ export class Game {
         p.z = s.position.z + (dz / d) * PEDESTAL_RADIUS;
       }
     }
-    p.y = THREE.MathUtils.lerp(p.y, heightAt(p.x) + HOVER, Math.min(1, dt * 12));
+    this.jumpTimer = Math.max(0, (this.jumpTimer ?? 0) - dt);
+    const hop = this.jumpTimer > 0 ? Math.sin((this.jumpTimer / JUMP_TIME) * Math.PI) * 2.2 : 0;
+    p.y = THREE.MathUtils.lerp(p.y, this.feet + HOVER + hop, Math.min(1, dt * 12));
 
     for (const orb of this.world.orbs.values()) {
       if (!orb.collected && Math.hypot(p.x - orb.group.position.x, p.z - orb.group.position.z) < ORB_RADIUS) this.collectOrb(orb);
+    }
+    for (const chest of this.world.chests.values()) {
+      if (!chest.opened && Math.hypot(p.x - chest.group.position.x, p.z - chest.group.position.z) < CHEST_RADIUS) this.openChest(chest);
     }
 
     const st = this.station;
@@ -545,6 +584,18 @@ export class Game {
       orb.halo.material.opacity = 1 - k;
     }, ease.out);
     orb.group.visible = false;
+  }
+
+  async openChest(chest) {
+    chest.opened = true;
+    sfx.collect();
+    this.ui.collectSecret(chest.entry);
+    await tween(0.6, (k) => { chest.lid.rotation.x = -k * 1.9; }, ease.back);
+  }
+
+  cycleTime() {
+    const name = this.world.sky.cycle();
+    this.ui.setTime(name);
   }
 
   layerAt(x) {
@@ -576,6 +627,9 @@ export class Game {
     const goal = this.cinematicCam ?? this.cameraGoal();
     const k = 1 - Math.exp(-dt * (this.cinematicCam ? 1.5 : 6));
     this.camera.position.lerp(goal.pos, k);
+    // keep the camera above the blocks when you look back towards a hill
+    const floor = this.world.ground.surface(this.camera.position.x, this.camera.position.z) + 1.2;
+    if (!this.cinematicCam && this.camera.position.y < floor) this.camera.position.y = floor;
     this.cam.target.lerp(goal.look, k);
     this.camera.lookAt(this.cam.target);
   }
@@ -591,12 +645,12 @@ export class Game {
     this.time += dt;
     updateTweens(dt);
     if (this.state.mode === 'walk') this.walk(dt);
-    else this.ui.showPrompt(null);
+    else {
+      this.ui.showPrompt(null);
+      this.feet = null;
+    }
     this.packet.update(dt, this.time, this.moveDir);
-    this.world.update(this.time, dt);
-    const p = this.packet.position;
-    this.world.sun.position.set(p.x + 25, p.y + 45, p.z + 20);
-    this.world.sun.target.position.copy(p);
+    this.world.update(this.time, dt, this.packet.position, this.camera);
     if (this.state.mode === 'rush') {
       const a = this.time * 0.12;
       this.cinematicCam.pos.set(21 + Math.cos(a) * 55, 32, Math.sin(a) * 55);

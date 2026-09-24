@@ -1,5 +1,7 @@
 # 📦 Packet Quest
 
+![The block world](docs/voxel/overview.jpg)
+
 A 3D serious game, built with [Three.js](https://threejs.org), that teaches the **TCP/IP stack** by making you the packet.
 
 Alice wants a cat picture from `catpics.example`. You are her HTTPS request:
@@ -13,6 +15,16 @@ Alice wants a cat picture from `catpics.example`. You are her HTTPS request:
 3. **Up the receiver's stack.** Climb back up while each layer checks and strips its header (decapsulation): accept the right frame, verify TTL, get past the server's firewall (first matching rule wins), check the protocol field, reassemble TCP segments by sequence number and deliver to the right port.
 
 The **Packet anatomy** panel shows your current headers and their fields at all times. Correct first answers are worth 100 points, with fewer points for later tries and an explanation for every wrong answer.
+
+### The block world
+
+The whole TCP/IP stack is one voxel landscape, generated in the browser from about 130,000 block faces with pixel-art textures painted at startup (no image files):
+
+- **Sender highlands.** Alice's side is a green, forested mountain. The four layers are terraces with block staircases between them, each with a giant glowing layer number behind it.
+- **The sea of routers.** The network is an ocean. Every router sits on its own sand island, linked by glowing fiber cables, with a lighthouse and circling gulls.
+- **Receiver mesa.** The server's side is a red mesa with striped terracotta cliffs and cacti.
+- **Exploring.** You can leave the paved path and wander the hills (up to two blocks at a time, `Space` to hop higher). 8 treasure chests hidden off the path each hold a networking fun fact. Sheep and chickens roam the terraces.
+- **Day, sunset and night.** Press `T` (or the ☀️ button) to change the time of day: the sky, lighting, fog and lighthouse beam all follow.
 
 ### Extras
 
@@ -30,6 +42,8 @@ The **Packet anatomy** panel shows your current headers and their fields at all 
 | Zoom | Scroll wheel | |
 | Use a station | `E` / `Enter`, or click it | Tap the prompt |
 | Glossary | `G` (close with `Esc`) | Tap 📖 |
+| Hop up a ledge | `Space` | |
+| Time of day | `T` | Tap ☀️ |
 
 ## Development
 
@@ -48,9 +62,12 @@ npm run build    # static build in dist/
 | `src/logic/net.js` | Pure helpers (CIDR matching, longest prefix match, firewall rule matching, segmentation, TTL) used by the content and covered by tests. |
 | `src/logic/rush.js` | Seeded question generator for Router Rush. |
 | `src/glossary.js` | Knowledge orb cards and where they are hidden. |
+| `src/secrets.js` | The hidden chests and their fun facts. |
+| `src/layout.js` | Where everything sits: plateaus, stations, gates, routers. |
+| `src/voxel/` | The block world: terrain generator, face-culling mesher with ambient occlusion, pixel-art textures, sky and day/night cycle, creatures. |
 | `src/rush.js` | The Router Rush bonus game UI. |
 | `src/sound.js` | Synthesized sound effects. |
-| `src/world.js` | The 3D world: layer plateaus, stations, gates, routers and cables. |
+| `src/world.js` | Builds the 3D world: terrain meshes, stations, gates, routers, cables, orbs and chests. |
 | `src/packet.js` | The player avatar: the data core plus one shell per header. |
 | `src/game.js` | Game loop, movement, camera, station flow and network flight. |
 | `src/ui.js` | HUD, packet anatomy card and the station panel that runs the steps. |
