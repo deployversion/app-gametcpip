@@ -13,6 +13,7 @@ import { createComposer } from './effects.js';
 import { Minimap } from './minimap.js';
 import { Particles } from './particles.js';
 import { RouteHologram } from './hologram.js';
+import { TouchControls } from './touch.js';
 
 const CONFETTI = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffd166', '#ffffff'];
 
@@ -631,6 +632,13 @@ export class Game {
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => this.keys.clear());
 
+    this.touch = new TouchControls({
+      canvas,
+      onJump: () => { if (this.state.mode === 'walk' && this.jump.y === 0) this.jump.v = JUMP_SPEED; },
+      onUse: () => this.tryInteract(),
+      onZoom: (d) => { this.cam.dist = THREE.MathUtils.clamp(this.cam.dist + d, 7, 45); },
+    });
+
     let down = null;
     canvas.addEventListener('pointerdown', (e) => {
       down = { x: e.clientX, y: e.clientY, yaw: this.cam.yaw, pitch: this.cam.pitch, dragged: false };
@@ -638,6 +646,10 @@ export class Game {
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!down) return;
+      if (this.touch.pinching) {
+        down.dragged = true;
+        return;
+      }
       const dx = e.clientX - down.x;
       const dy = e.clientY - down.y;
       if (Math.abs(dx) + Math.abs(dy) > 6) down.dragged = true;
@@ -694,6 +706,12 @@ export class Game {
     if (k.has('s') || k.has('arrowdown')) input.sub(f);
     if (k.has('d') || k.has('arrowright')) input.add(r);
     if (k.has('a') || k.has('arrowleft')) input.sub(r);
+    const stick = this.touch.vec;
+    const push = Math.hypot(stick.x, stick.y);
+    if (push > 0.15) {
+      input.addScaledVector(f, -stick.y).addScaledVector(r, stick.x);
+      this.moveTarget = null;
+    }
 
     const p = this.packet.position;
     if (input.lengthSq() === 0 && this.moveTarget) {
@@ -703,7 +721,10 @@ export class Game {
         input.set(0, 0, 0);
       }
     }
-    const speed = WALK_SPEED * (k.has('shift') ? SPRINT : 1);
+    // Keys sprint with shift; the joystick sprints when pushed to the rim.
+    const sprint = k.has('shift') || push > 0.95;
+    const analog = push > 0.15 && input.lengthSq() > 0 ? Math.min(1, push * 1.2) : 1;
+    const speed = WALK_SPEED * (sprint ? SPRINT : analog);
     if (input.lengthSq() > 0) input.normalize().multiplyScalar(speed * dt);
     this.moveDir = input.clone();
 
@@ -749,6 +770,7 @@ export class Game {
     const st = this.station;
     const near = st && st.side !== 'network' && this.distanceToStation(st.id) <= INTERACT_RADIUS;
     this.ui.showPrompt(near ? st.title : null);
+    this.touch.setUseReady(!!near);
     this.ui.setActiveLayer(this.layerAt(p.x));
   }
 
@@ -833,6 +855,7 @@ export class Game {
     this.hologram.update(dt, this.time);
     if (this.state.mode === 'walk') this.walk(dt);
     else this.ui.showPrompt(null);
+    this.touch.setVisible(this.state.mode === 'walk' && !this.ui.glossaryOpen);
     this.packet.update(dt, this.time, this.moveDir);
     this.world.update(this.time, dt);
     const p = this.packet.position;
