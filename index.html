@@ -16,6 +16,7 @@
         <div id="legend" aria-label="TCP/IP layers"></div>
         <div class="score">Score <b id="score">0</b></div>
         <button id="glossary-btn" class="hud-btn" title="Glossary (G)">📖 <b id="orb-count">0</b></button>
+        <button id="quality-btn" class="hud-btn" title="Glow effects on/off">✨</button>
         <button id="mute-btn" class="hud-btn" title="Sound on/off">🔊</button>
       </div>
       <div id="objective"><span class="label">Objective</span><span id="objective-text"></span></div>
@@ -24,7 +25,7 @@
         <div id="packet-card"></div>
       </div>
       <button id="prompt" hidden></button>
-      <div id="help">WASD / arrows or tap the ground to move · drag to look · scroll to zoom · E to interact · G glossary · collect the glowing <b>?</b> orbs</div>
+      <div id="help">WASD / arrows or tap the ground to move · Shift sprint · Space jump · drag to look · scroll to zoom · E interact · G glossary · collect the glowing <b>?</b> orbs</div>
     </div>
 
     <section id="panel" hidden aria-live="polite">
@@ -42,7 +43,7 @@
         <div class="kicker">A serious game about networking</div>
         <h1>📦 Packet Quest</h1>
         <p>Alice wants a cat picture from <b>catpics.example</b>. <b>You are her request.</b></p>
-        <p>Walk <b>down</b> the four layers of the TCP/IP stack on her laptop, getting wrapped in a header at each one. Fly across the internet from router to router. Then climb <b>up</b> the server's stack while each layer unwraps you.</p>
+        <p>Walk <b>down</b> the four layers of the TCP/IP stack inside her laptop, getting wrapped in a header at each one. Then cross the <b>real, physical internet</b>: Wi-Fi to her home router, the street cabinet, the ISP, and an undersea cable across the ocean. Finally climb <b>up</b> the floors of a data centre while each layer unwraps you.</p>
         <div class="stack-mini">
           <span style="--c:#b56cff">4 · Application</span>
           <span style="--c:#ff8a3d">3 · Transport</span>
@@ -53,8 +54,9 @@
         <div class="actions">
           <button id="start-btn" class="primary big">Start the mission</button>
           <button id="rush-btn" class="secondary big">⚡ Router Rush</button>
+          <button id="explore-btn" class="secondary big">🧭 Explore freely</button>
         </div>
-        <p class="muted small">Router Rush is a 60-second bonus game: route as many packets as you can.</p>
+        <p class="muted small">Router Rush is a 60-second bonus game: route as many packets as you can. Explore mode opens every gate, and a tour pad flies you along the cables between the laptop and the data centre.</p>
       </div>
     </div>
 
@@ -103,6 +105,7 @@
         <div class="actions">
           <button id="restart-btn" class="primary big">Play again</button>
           <button id="end-rush-btn" class="secondary big">⚡ Router Rush</button>
+          <button id="end-explore-btn" class="secondary big">🧭 Explore</button>
         </div>
       </div>
     </div>
