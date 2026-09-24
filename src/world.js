@@ -2,19 +2,22 @@ import * as THREE from 'three';
 import { LAYERS, STATIONS } from './content.js';
 import { makeLabel, gridTexture } from './labels.js';
 import { GLOSSARY } from './glossary.js';
+import { buildEnvironment, DECK_HALF } from './environment.js';
+import { makeSky, makeDataOcean } from './effects.js';
 
 // The world is the TCP/IP stack turned into terrain: the sender's layers are
 // plateaus you walk *down*, the network is an abyss of routers you fly
 // across, and the receiver's layers are plateaus you climb back *up*.
 
-export const PATH_HALF_WIDTH = 9;
+export const PATH_HALF_WIDTH = 12.5;
+export { DECK_HALF };
 
 const PROFILE = {
   sender: [[-124, 15], [-88, 15], [-78, 10], [-58, 10], [-48, 5], [-28, 5], [-18, 0], [-2, 0]],
   receiver: [[44, 0], [60, 0], [70, 5], [86, 5], [96, 10], [112, 10], [122, 15], [146, 15]],
 };
 
-const PLATEAUS = [
+export const PLATEAUS = [
   { side: 'sender', layer: 'app', x0: -124, x1: -88, h: 15 },
   { side: 'sender', layer: 'transport', x0: -78, x1: -58, h: 10 },
   { side: 'sender', layer: 'internet', x0: -48, x1: -28, h: 5 },
@@ -64,7 +67,7 @@ export const NODES = {
 const NODE_LABELS = {
   GW: 'Home router', R1: 'R1 · ISP', R2: 'R2', R3: 'R3', R4: 'R4 · backbone', R5: 'R5', R6: 'R6', SW: 'Server LAN',
 };
-const LINKS = [['GW', 'R1'], ['R1', 'R2'], ['R1', 'R3'], ['R1', 'R4'], ['R1', 'R5'], ['R2', 'R4'], ['R3', 'R4'], ['R4', 'R6'], ['R4', 'SW'], ['R5', 'R2'], ['R6', 'SW']];
+export const LINKS = [['GW', 'R1'], ['R1', 'R2'], ['R1', 'R3'], ['R1', 'R4'], ['R1', 'R5'], ['R2', 'R4'], ['R3', 'R4'], ['R4', 'R6'], ['R4', 'SW'], ['R5', 'R2'], ['R6', 'SW']];
 const NODE_Y = 1.2;
 
 export function heightAt(x) {
@@ -92,7 +95,7 @@ export function buildWorld(scene) {
 
   // --- sky, fog, light -----------------------------------------------------
   scene.background = new THREE.Color('#070b22');
-  scene.fog = new THREE.Fog('#070b22', 70, 230);
+  scene.fog = new THREE.Fog('#0b0a2a', 80, 260);
   scene.add(new THREE.HemisphereLight('#a9c8ff', '#1a1036', 1.1));
   const sun = new THREE.DirectionalLight('#ffffff', 1.6);
   sun.castShadow = true;
@@ -100,6 +103,12 @@ export function buildWorld(scene) {
   Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 160 });
   sun.shadow.bias = -0.0005;
   scene.add(sun, sun.target);
+  const sky = makeSky();
+  scene.add(sky.mesh);
+  animated.push((t) => {
+    sky.update(t);
+    sky.mesh.position.copy(sun.target.position);
+  });
 
   scene.add(makeStars());
 
@@ -111,8 +120,8 @@ export function buildWorld(scene) {
     pts.forEach(([x, y]) => shape.lineTo(x, y));
     shape.lineTo(pts[pts.length - 1][0], -40);
     shape.closePath();
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: PATH_HALF_WIDTH * 2 + 2, bevelEnabled: false });
-    geo.translate(0, 0, -(PATH_HALF_WIDTH + 1));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: DECK_HALF * 2, bevelEnabled: false });
+    geo.translate(0, 0, -DECK_HALF);
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#1b2150', roughness: 0.85, metalness: 0.1 }));
     mesh.receiveShadow = true;
     scene.add(mesh);
@@ -122,7 +131,7 @@ export function buildWorld(scene) {
   for (const p of PLATEAUS) {
     const layer = LAYERS[p.layer];
     const w = p.x1 - p.x0;
-    const d = PATH_HALF_WIDTH * 2 + 2;
+    const d = DECK_HALF * 2;
     const top = new THREE.Mesh(
       new THREE.BoxGeometry(w, 0.2, d),
       new THREE.MeshStandardMaterial({
@@ -146,10 +155,10 @@ export function buildWorld(scene) {
 
     // big layer sign on the far wall
     const sign = makeLabel(`LAYER ${layer.num}\n${layer.name.toUpperCase()}`, { color: layer.color, size: 2.4, font: 800, border: layer.color });
-    sign.position.set((p.x0 + p.x1) / 2, p.h + 9, -PATH_HALF_WIDTH - 6);
+    sign.position.set((p.x0 + p.x1) / 2, p.h + 17, -DECK_HALF - 3);
     scene.add(sign);
     const pdu = makeLabel(`unit: ${layer.pdu}`, { color: '#cfd6ff', size: 1.1, bg: null });
-    pdu.position.set((p.x0 + p.x1) / 2, p.h + 5.6, -PATH_HALF_WIDTH - 6);
+    pdu.position.set((p.x0 + p.x1) / 2, p.h + 13.6, -DECK_HALF - 3);
     scene.add(pdu);
   }
 
@@ -222,13 +231,13 @@ export function buildWorld(scene) {
     const gate = new THREE.Group();
     gate.position.set(x, h, 0);
     const field = new THREE.Mesh(
-      new THREE.PlaneGeometry(PATH_HALF_WIDTH * 2 + 2, 5),
+      new THREE.PlaneGeometry(DECK_HALF * 2, 5),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
     );
     field.rotation.y = Math.PI / 2;
     field.position.y = 2.5;
     gate.add(field);
-    for (const z of [-(PATH_HALF_WIDTH + 1), PATH_HALF_WIDTH + 1]) {
+    for (const z of [-DECK_HALF, DECK_HALF]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.6, 5.6, 0.6), new THREE.MeshStandardMaterial({ color: '#2b3370', emissive: color, emissiveIntensity: 0.4 }));
       post.position.set(0, 2.8, z);
       gate.add(post);
@@ -244,9 +253,10 @@ export function buildWorld(scene) {
   }
 
   // --- network -------------------------------------------------------------
-  const abyss = new THREE.GridHelper(300, 150, '#2a3a9a', '#141c55');
-  abyss.position.set(21, -8, 0);
-  scene.add(abyss);
+  const ocean = makeDataOcean();
+  ocean.mesh.position.set(21, -9, 0);
+  scene.add(ocean.mesh);
+  animated.push((t) => ocean.update(t));
 
   const cableMat = new THREE.MeshBasicMaterial({ color: '#4be1ff', transparent: true, opacity: 0.55 });
   const cables = new Map();
@@ -293,6 +303,36 @@ export function buildWorld(scene) {
   }
 
   scene.add(makeBitDust(animated));
+  scene.add(makeTraffic(animated));
+  scene.add(makeHorizon(animated));
+
+  const env = buildEnvironment(scene, PLATEAUS, animated);
+  const colliders = [
+    ...env.colliders,
+    { x: -119, z: -13, r: 4 }, // laptop
+    { x: 142, z: -9, r: 3.2 }, // server rack
+  ];
+
+  // Ferry pads (explore mode): step on one to fly across the network.
+  const ferries = new Map();
+  for (const [side, x] of [['sender', -5], ['receiver', 57]]) {
+    const pad = new THREE.Group();
+    pad.position.set(x, heightAt(x) + 0.12, 8);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.12, 40), new THREE.MeshBasicMaterial({ color: '#4be1ff', transparent: true, opacity: 0.7 }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.9, 0.08, 8, 48), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+    ring.rotation.x = Math.PI / 2;
+    const label = makeLabel(side === 'sender' ? 'Ferry → server side' : 'Ferry → Alice\'s side', { size: 0.5, color: '#bfe9ff' });
+    label.position.y = 2.2;
+    pad.add(disc, ring, label);
+    pad.visible = false;
+    scene.add(pad);
+    ferries.set(side, { side, group: pad, position: pad.position });
+    animated.push((t) => {
+      ring.position.y = 0.3 + ((t * 0.8) % 1) * 1.5;
+      ring.material.opacity = 1 - ((t * 0.8) % 1);
+      ring.material.transparent = true;
+    });
+  }
 
   // --- knowledge orbs ------------------------------------------------------
   const orbs = new Map();
@@ -322,6 +362,8 @@ export function buildWorld(scene) {
 
   return {
     orbs,
+    colliders,
+    ferries,
     sun,
     walkables,
     stations,
@@ -332,6 +374,78 @@ export function buildWorld(scene) {
       for (const fn of animated) fn(t, dt);
     },
   };
+}
+
+// Other people's packets zipping along every cable in the network.
+function makeTraffic(animated) {
+  const adjacency = {};
+  for (const [a, b] of LINKS) {
+    (adjacency[a] ??= []).push(b);
+    (adjacency[b] ??= []).push(a);
+  }
+  const ids = Object.keys(adjacency);
+  const count = 48;
+  const mesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.35, 0.35, 0.35),
+    new THREE.MeshBasicMaterial({ color: '#ffffff' }),
+    count,
+  );
+  const palette = ['#4be1ff', '#b56cff', '#ff8a3d', '#35d07f', '#ffd166'].map((c) => new THREE.Color(c));
+  const movers = Array.from({ length: count }, (_, i) => {
+    const from = ids[i % ids.length];
+    const to = adjacency[from][Math.floor(Math.random() * adjacency[from].length)];
+    mesh.setColorAt(i, palette[i % palette.length]);
+    return { from, to, t: Math.random(), speed: 0.25 + Math.random() * 0.5 };
+  });
+  const m = new THREE.Matrix4();
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  animated.push((t, dt = 1 / 60) => {
+    movers.forEach((mv, i) => {
+      mv.t += mv.speed * dt;
+      if (mv.t >= 1) {
+        mv.t = 0;
+        mv.from = mv.to;
+        const next = adjacency[mv.from];
+        mv.to = next[Math.floor(Math.random() * next.length)];
+      }
+      a.copy(nodePosition(mv.from));
+      b.copy(nodePosition(mv.to));
+      a.lerp(b, mv.t);
+      a.y += 0.35;
+      m.makeTranslation(a.x, a.y, a.z);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  });
+  return mesh;
+}
+
+// Distant data towers on the horizon, with blinking tops.
+function makeHorizon(animated) {
+  const group = new THREE.Group();
+  const n = 70;
+  const towers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: '#141a44', emissive: '#1d2a7a', emissiveIntensity: 0.35, fog: false }), n);
+  const tops = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: '#ffffff', fog: false }), n);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const topColors = ['#4be1ff', '#b56cff', '#ff4d6d', '#35d07f'].map((c) => new THREE.Color(c));
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * Math.PI * 2 + Math.random() * 0.05;
+    const r = 230 + Math.random() * 60;
+    const h = 20 + Math.random() * 70;
+    const w = 4 + Math.random() * 8;
+    const x = 21 + Math.cos(ang) * r;
+    const z = Math.sin(ang) * r;
+    m.compose(new THREE.Vector3(x, h / 2 - 20, z), q, new THREE.Vector3(w, h, w));
+    towers.setMatrixAt(i, m);
+    m.compose(new THREE.Vector3(x, h - 19.5, z), q, new THREE.Vector3(w * 0.5, 1, w * 0.5));
+    tops.setMatrixAt(i, m);
+    tops.setColorAt(i, topColors[i % topColors.length]);
+  }
+  group.add(towers, tops);
+  animated.push((t) => { tops.visible = Math.sin(t * 1.2) > -0.7; });
+  return group;
 }
 
 function makeBeacon(color) {
@@ -395,8 +509,10 @@ function makeBitDust(animated) {
 
 function makeLaptop() {
   const g = new THREE.Group();
-  // Beside the path on the far side, screen facing the player.
-  g.position.set(-114, 15, -13);
+  // At the start of the path, screen turned towards the player.
+  g.position.set(-119, 15, -13);
+  g.rotation.y = 0.5;
+  g.scale.setScalar(0.75);
   const mat = new THREE.MeshStandardMaterial({ color: '#c9cfe6', metalness: 0.7, roughness: 0.3 });
   const base = new THREE.Mesh(new THREE.BoxGeometry(12, 0.5, 8), mat);
   base.position.y = 0.25;
@@ -425,7 +541,7 @@ function makeLaptop() {
 
 function makeServerRack(animated) {
   const g = new THREE.Group();
-  g.position.set(142, 15, -3);
+  g.position.set(142, 15, -9);
   const rack = new THREE.Mesh(new THREE.BoxGeometry(4, 12, 5), new THREE.MeshStandardMaterial({ color: '#1c1f33', metalness: 0.6, roughness: 0.4 }));
   rack.position.y = 6;
   g.add(rack);

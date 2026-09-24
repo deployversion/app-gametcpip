@@ -29,7 +29,7 @@ export class PacketAvatar {
     this.core.visible = false;
     this.body.add(this.core);
 
-    this.light = new THREE.PointLight('#ffffff', 12, 10, 1.6);
+    this.light = new THREE.PointLight('#ffffff', 7, 10, 1.6);
     this.light.position.y = 0.5;
     this.group.add(this.light);
 

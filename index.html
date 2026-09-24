@@ -10,12 +10,23 @@
   <body>
     <div id="app"></div>
 
+    <div id="loader" role="status" aria-live="polite">
+      <div class="loader-card">
+        <div class="loader-packet"><span></span><span></span><span></span><span></span></div>
+        <h1>📦 Packet Quest</h1>
+        <div class="loader-bar"><i id="loader-fill"></i></div>
+        <p id="loader-step">Loading…</p>
+        <p id="loader-tip" class="muted small"></p>
+      </div>
+    </div>
+
     <div id="hud" hidden>
       <div id="topbar">
         <div class="brand">📦 Packet Quest</div>
         <div id="legend" aria-label="TCP/IP layers"></div>
         <div class="score">Score <b id="score">0</b></div>
         <button id="glossary-btn" class="hud-btn" title="Glossary (G)">📖 <b id="orb-count">0</b></button>
+        <button id="quality-btn" class="hud-btn" title="Glow effects on/off">✨</button>
         <button id="mute-btn" class="hud-btn" title="Sound on/off">🔊</button>
       </div>
       <div id="objective"><span class="label">Objective</span><span id="objective-text"></span></div>
@@ -23,8 +34,9 @@
         <div class="title">Packet anatomy</div>
         <div id="packet-card"></div>
       </div>
+      <canvas id="minimap" title="Map (M to hide)"></canvas>
       <button id="prompt" hidden></button>
-      <div id="help">WASD / arrows or tap the ground to move · drag to look · scroll to zoom · E to interact · G glossary · collect the glowing <b>?</b> orbs</div>
+      <div id="help">WASD / arrows or tap the ground to move · Shift sprint · Space jump · drag to look · scroll to zoom · E interact · G glossary · M map · collect the glowing <b>?</b> orbs</div>
     </div>
 
     <section id="panel" hidden aria-live="polite">
@@ -38,6 +50,7 @@
     <div id="toast" role="status"></div>
 
     <div id="intro" class="overlay">
+      <div id="attract-caption" aria-hidden="true"></div>
       <div class="card">
         <div class="kicker">A serious game about networking</div>
         <h1>📦 Packet Quest</h1>
@@ -49,12 +62,13 @@
           <span style="--c:#35d07f">2 · Internet</span>
           <span style="--c:#3d9bff">1 · Link</span>
         </div>
-        <p class="controls">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or tap the ground · drag to look around · <kbd>E</kbd> to use a station</p>
+        <p class="controls">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or tap the ground · drag to look around · <kbd>E</kbd> to use a station · on a phone use the joystick and buttons</p>
         <div class="actions">
           <button id="start-btn" class="primary big">Start the mission</button>
           <button id="rush-btn" class="secondary big">⚡ Router Rush</button>
+          <button id="explore-btn" class="secondary big">🧭 Explore freely</button>
         </div>
-        <p class="muted small">Router Rush is a 60-second bonus game: route as many packets as you can.</p>
+        <p class="muted small">Router Rush is a 60-second bonus game: route as many packets as you can. Explore mode opens every gate so you can roam the whole world.</p>
       </div>
     </div>
 
@@ -103,6 +117,7 @@
         <div class="actions">
           <button id="restart-btn" class="primary big">Play again</button>
           <button id="end-rush-btn" class="secondary big">⚡ Router Rush</button>
+          <button id="end-explore-btn" class="secondary big">🧭 Explore</button>
         </div>
       </div>
     </div>
