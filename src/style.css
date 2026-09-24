@@ -1,12 +1,13 @@
 :root {
-  --bg: #070b22;
-  --glass: rgba(12, 17, 48, 0.82);
-  --line: rgba(160, 180, 255, 0.18);
-  --text: #eef1ff;
-  --muted: #a9b1d8;
-  --good: #35d07f;
-  --bad: #ff5d73;
-  --accent: #4be1ff;
+  --bg: #1d0d33;
+  --glass: rgba(14, 8, 30, 0.8);
+  --line: rgba(5, 217, 232, 0.22);
+  --text: #f2eeff;
+  --muted: #b3a9d8;
+  --good: #39ff88;
+  --bad: #ff2a6d;
+  --accent: #05d9e8;
+  --pink: #ff2a6d;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   color: var(--text);
 }
@@ -22,9 +23,10 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 
 button { font: inherit; color: inherit; cursor: pointer; }
 button.primary {
-  background: linear-gradient(180deg, #5b7bff, #3a55e0);
+  background: linear-gradient(180deg, #ff2a6d, #c3125a);
   border: 0; border-radius: 10px; padding: 10px 20px; font-weight: 700; color: white;
-  box-shadow: 0 6px 18px rgba(58, 85, 224, .35);
+  box-shadow: 0 0 18px rgba(255, 42, 109, .55), inset 0 0 0 1px rgba(255,255,255,.25);
+  text-shadow: 0 0 8px rgba(255,255,255,.5);
 }
 button.primary:hover { filter: brightness(1.1); }
 button.primary:disabled { opacity: .5; cursor: default; }
@@ -44,7 +46,34 @@ button.secondary:hover { border-color: var(--accent); }
 .brand, .score, #legend, #objective, #packet-panel, #help {
   background: var(--glass); border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(8px);
 }
-.brand { padding: 8px 14px; font-weight: 800; }
+.brand { padding: 8px 14px; font-weight: 800; color: #fff; text-shadow: 0 0 6px var(--pink), 0 0 16px var(--pink); letter-spacing: .04em; }
+.hud-btn.off { opacity: .45; }
+.hud-btn.landmarks { pointer-events: none; }
+
+/* photo mode hides the HUD so the city can be screenshotted */
+body.photo #hud, body.photo #toast, body.photo #landmark { display: none !important; }
+#photo-exit { display: none; position: fixed; right: 12px; bottom: 12px; }
+body.photo #photo-exit { display: block; opacity: .35; }
+body.photo #photo-exit:hover { opacity: 1; }
+
+/* faint CRT scanlines over the whole screen */
+body::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.12) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+.neon-title { color: #fff; text-shadow: 0 0 6px var(--pink), 0 0 22px var(--pink), 0 0 42px rgba(255,42,109,.6); }
+
+#landmark {
+  position: fixed; top: 150px; right: 12px; width: min(320px, calc(100vw - 24px)); opacity: 0; pointer-events: none;
+  background: var(--glass); border: 1px solid var(--pink); border-left: 4px solid var(--pink); border-radius: 12px; padding: 10px 14px;
+  box-shadow: 0 0 24px rgba(255, 42, 109, .35); backdrop-filter: blur(8px); transform: translateX(20px);
+}
+#landmark b { display: block; font-size: 1.1rem; color: #fff; text-shadow: 0 0 10px var(--pink); }
+#landmark p { margin: 4px 0 0; font-size: .88rem; color: var(--muted); line-height: 1.45; }
+#landmark .kicker { color: var(--pink); }
+#landmark.show { animation: landmark 7s ease forwards; }
+@keyframes landmark { 5%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateX(20px); } }
 .score { padding: 8px 14px; margin-left: auto; color: var(--muted); }
 .score b { color: var(--text); }
 #legend { display: flex; gap: 4px; padding: 4px; }
@@ -122,7 +151,7 @@ button:disabled { cursor: default; }
 .step-footer { display: flex; justify-content: flex-end; }
 
 /* ------------------------------------------------------------ overlays */
-.overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(7,11,34,.55), rgba(7,11,34,.92)); }
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(29,13,51,.35), rgba(12,5,24,.9)); }
 .overlay .card {
   max-width: 560px; width: 100%; background: var(--glass); border: 1px solid var(--line); border-radius: 18px; padding: 28px 30px;
   text-align: center; line-height: 1.55; box-shadow: 0 30px 80px rgba(0,0,0,.6); backdrop-filter: blur(10px);
@@ -179,4 +208,5 @@ button:disabled { cursor: default; }
   .hdr-fields { display: none; }
   #panel { top: auto; height: 62vh; bottom: 0; right: 0; left: 0; width: 100%; border-radius: 14px 14px 0 0; }
   #prompt { bottom: 130px; }
+  #landmark { top: auto; bottom: 110px; }
 }

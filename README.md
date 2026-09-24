@@ -14,6 +14,17 @@ Alice wants a cat picture from `catpics.example`. You are her HTTPS request:
 
 The **Packet anatomy** panel shows your current headers and their fields at all times. Correct first answers are worth 100 points, with fewer points for later tries and an explanation for every wrong answer.
 
+### The world: Neon Megacity
+
+The stack is a rain-soaked cyberpunk city. The sender's layers are rooftop decks of the **client district** that step down one level per layer, the network is a **street canyon** where every router sits on its own tower, and the receiver's layers climb back up the **server district**. Around it, about 1,200 procedurally generated towers with lit windows, neon signs that name networking ideas (DNS Noodle Bar, Handshake Hotel, ARP Alley, Firewall), hovercar traffic in street lanes, searchlights, a blimp scrolling RFC numbers and a giant hologram of the cat picture you're fetching. Bloom makes the neon glow; toggle it with ✨ if your GPU struggles.
+
+![Client district skyline](docs/screenshots/cyberpunk-skyline.png)
+
+- **Explore the city.** From the start or end screen, free-roam mode opens every gate. Step on a cyan **maglev pad** at the edge of either district to fly across the canyon.
+- **Landmarks.** Nine 📍 places hide along the decks. Walking up to one shows a short networking fact.
+- **Sprint, jump, photo mode.** `Shift` to sprint, `Space` to jump, `P` hides the HUD for screenshots, and you can zoom much further out to take in the skyline.
+- **Ambient sound.** Rain and a low city hum under the sound effects (muted with 🔊).
+
 ### Extras
 
 - **Knowledge orbs.** 14 glowing `?` orbs are hidden on the plateaus. Walk through one to unlock a glossary card (DNS, TLS, UDP, flow control, IPv6, ICMP, switches, Wi-Fi, MTU, private addresses, traceroute, sockets, QUIC, HTTP status codes). Open the glossary with `G` or the 📖 button.
@@ -30,6 +41,8 @@ The **Packet anatomy** panel shows your current headers and their fields at all 
 | Zoom | Scroll wheel | |
 | Use a station | `E` / `Enter`, or click it | Tap the prompt |
 | Glossary | `G` (close with `Esc`) | Tap 📖 |
+| Sprint / jump | `Shift` / `Space` | |
+| Photo mode | `P` | Tap 📷 |
 
 ## Development
 
@@ -50,7 +63,9 @@ npm run build    # static build in dist/
 | `src/glossary.js` | Knowledge orb cards and where they are hidden. |
 | `src/rush.js` | The Router Rush bonus game UI. |
 | `src/sound.js` | Synthesized sound effects. |
-| `src/world.js` | The 3D world: layer plateaus, stations, gates, routers and cables. |
+| `src/world.js` | The lesson's 3D layout: layer decks, stations, gates, router towers, cables and maglev pads. |
+| `src/city.js` | The Neon Megacity around it: tower generator and window shader, neon signs, traffic, rain, sky, blimp, hologram and landmarks. |
+| `src/effects.js` | Bloom post-processing. |
 | `src/packet.js` | The player avatar: the data core plus one shell per header. |
 | `src/game.js` | Game loop, movement, camera, station flow and network flight. |
 | `src/ui.js` | HUD, packet anatomy card and the station panel that runs the steps. |

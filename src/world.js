@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { LAYERS, STATIONS } from './content.js';
 import { makeLabel, gridTexture } from './labels.js';
 import { GLOSSARY } from './glossary.js';
+import { buildCity, buildingMaterial, FLOOR } from './city.js';
 
-// The world is the TCP/IP stack turned into terrain: the sender's layers are
-// plateaus you walk *down*, the network is an abyss of routers you fly
-// across, and the receiver's layers are plateaus you climb back *up*.
+// The world is the TCP/IP stack turned into a neon megacity: the sender's
+// layers are rooftop decks you walk *down*, the network is the street canyon
+// of router towers you fly across, and the receiver's layers are decks you
+// climb back *up*. The skyline around it all lives in city.js.
 
 export const PATH_HALF_WIDTH = 9;
 
@@ -83,38 +85,36 @@ export function nodePosition(id) {
   return new THREE.Vector3(x, NODE_Y, z);
 }
 
-export function buildWorld(scene) {
+export function buildWorld(scene, renderer) {
   const walkables = [];
   const animated = [];
   const stations = new Map();
   const gates = new Map();
   const routers = new Map();
 
-  // --- sky, fog, light -----------------------------------------------------
-  scene.background = new THREE.Color('#070b22');
-  scene.fog = new THREE.Fog('#070b22', 70, 230);
-  scene.add(new THREE.HemisphereLight('#a9c8ff', '#1a1036', 1.1));
-  const sun = new THREE.DirectionalLight('#ffffff', 1.6);
+  // --- light (sky, fog and the skyline come from the city) ----------------
+  scene.add(new THREE.HemisphereLight('#8a7dff', '#ff2a6d', 0.55));
+  // cold moonlight, which also casts the packet's shadow
+  const sun = new THREE.DirectionalLight('#b8c6ff', 1.1);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 160 });
   sun.shadow.bias = -0.0005;
   scene.add(sun, sun.target);
 
-  scene.add(makeStars());
-
   // --- terrain -------------------------------------------------------------
   for (const side of ['sender', 'receiver']) {
     const pts = PROFILE[side];
     const shape = new THREE.Shape();
-    shape.moveTo(pts[0][0], -40);
+    shape.moveTo(pts[0][0], FLOOR);
     pts.forEach(([x, y]) => shape.lineTo(x, y));
-    shape.lineTo(pts[pts.length - 1][0], -40);
+    shape.lineTo(pts[pts.length - 1][0], FLOOR);
     shape.closePath();
     const geo = new THREE.ExtrudeGeometry(shape, { depth: PATH_HALF_WIDTH * 2 + 2, bevelEnabled: false });
     geo.translate(0, 0, -(PATH_HALF_WIDTH + 1));
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#1b2150', roughness: 0.85, metalness: 0.1 }));
-    mesh.receiveShadow = true;
+    // the arcology block the decks sit on, lit window by window
+    const mesh = new THREE.Mesh(geo, buildingMaterial({ seed: side === 'sender' ? 11 : 47 }));
+    animated.push((t) => { mesh.material.uniforms.uTime.value = t; });
     scene.add(mesh);
     walkables.push(mesh);
   }
@@ -128,8 +128,9 @@ export function buildWorld(scene) {
       new THREE.MeshStandardMaterial({
         map: gridTexture(layer.color, w / 4, d / 4),
         emissive: new THREE.Color(layer.color),
-        emissiveIntensity: 0.12,
-        roughness: 0.6,
+        emissiveIntensity: 0.1,
+        roughness: 0.35,
+        metalness: 0.4,
       }),
     );
     top.position.set((p.x0 + p.x1) / 2, p.h + 0.02, 0);
@@ -139,7 +140,7 @@ export function buildWorld(scene) {
 
     // glowing rim along both long edges
     for (const z of [-d / 2, d / 2]) {
-      const rim = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, 0.25), new THREE.MeshBasicMaterial({ color: layer.color }));
+      const rim = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, 0.25), new THREE.MeshBasicMaterial({ color: new THREE.Color(layer.color).multiplyScalar(1.6), toneMapped: false }));
       rim.position.set((p.x0 + p.x1) / 2, p.h + 0.1, z);
       scene.add(rim);
     }
@@ -158,9 +159,9 @@ export function buildWorld(scene) {
     l.position.set(x, 32, -20);
     scene.add(l);
   };
-  sideTitle('SENDER · going DOWN the stack', -64);
-  sideTitle('RECEIVER · going UP the stack', 96);
-  sideTitle('THE NETWORK', 21);
+  sideTitle('CLIENT DISTRICT · going DOWN the stack', -64);
+  sideTitle('SERVER DISTRICT · going UP the stack', 96);
+  sideTitle('THE NETWORK · street canyon', 21);
 
   scene.add(makeLaptop());
   scene.add(makeServerRack(animated));
@@ -244,11 +245,7 @@ export function buildWorld(scene) {
   }
 
   // --- network -------------------------------------------------------------
-  const abyss = new THREE.GridHelper(300, 150, '#2a3a9a', '#141c55');
-  abyss.position.set(21, -8, 0);
-  scene.add(abyss);
-
-  const cableMat = new THREE.MeshBasicMaterial({ color: '#4be1ff', transparent: true, opacity: 0.55 });
+  const cableMat = new THREE.MeshBasicMaterial({ color: '#4be1ff', transparent: true, opacity: 0.7 });
   const cables = new Map();
   const addCable = (a, b, key) => {
     const curve = new THREE.LineCurve3(a, b);
@@ -264,9 +261,12 @@ export function buildWorld(scene) {
     const pos = nodePosition(id);
     const g = new THREE.Group();
     g.position.copy(pos);
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, 10, 12), new THREE.MeshStandardMaterial({ color: '#161d4a' }));
-    pillar.position.y = -5.4;
+    // each router sits on the roof of its own tower
+    const towerH = NODE_Y - 0.45 - FLOOR;
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(3.6, towerH, 3.6), buildingMaterial({ seed: pos.x * 3.1 + pos.z }));
+    pillar.position.y = -0.45 - towerH / 2;
     g.add(pillar);
+    animated.push((t) => { pillar.material.uniforms.uTime.value = t; });
     const isSwitch = id === 'SW';
     const body = new THREE.Mesh(
       isSwitch ? new THREE.BoxGeometry(3, 0.9, 2) : new THREE.CylinderGeometry(1.6, 1.6, 0.9, 32),
@@ -293,6 +293,29 @@ export function buildWorld(scene) {
   }
 
   scene.add(makeBitDust(animated));
+
+  const city = buildCity(scene, { plateaus: PLATEAUS, heightAt, nodes: NODES, renderer });
+
+  // Maglev pads at the network edges; only active in explore mode.
+  const ferries = new Map();
+  for (const [side, x] of [['sender', -6], ['receiver', 48]]) {
+    const pad = new THREE.Group();
+    pad.position.set(x, 0, 6);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 0.15, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color('#05d9e8').multiplyScalar(1.4), toneMapped: false }));
+    disc.position.y = 0.08;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.08, 8, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff2a6d').multiplyScalar(2), toneMapped: false }));
+    ring.rotation.x = Math.PI / 2;
+    const tag = makeLabel('MAGLEV ⇄ other district', { size: 0.6, color: '#05d9e8', border: '#05d9e8' });
+    tag.position.y = 3.2;
+    pad.add(disc, ring, tag);
+    pad.visible = false;
+    scene.add(pad);
+    ferries.set(side, { group: pad, position: pad.position });
+    animated.push((t) => {
+      ring.position.y = 0.3 + ((t * 0.8) % 1) * 2.5;
+      ring.scale.setScalar(1 - ((t * 0.8) % 1) * 0.3);
+    });
+  }
 
   // --- knowledge orbs ------------------------------------------------------
   const orbs = new Map();
@@ -322,14 +345,17 @@ export function buildWorld(scene) {
 
   return {
     orbs,
+    ferries,
+    landmarks: city.landmarks,
     sun,
     walkables,
     stations,
     gates,
     routers,
     cables,
-    update(t, dt) {
+    update(t, dt, camera) {
       for (const fn of animated) fn(t, dt);
+      city.update(t, dt, camera);
     },
   };
 }
@@ -341,22 +367,6 @@ function makeBeacon(color) {
   );
   beacon.position.y = 30;
   return beacon;
-}
-
-function makeStars() {
-  const n = 1500;
-  const pos = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    const r = 260 + Math.random() * 60;
-    const th = Math.random() * Math.PI * 2;
-    const ph = Math.random() * Math.PI * 0.5;
-    pos[i * 3] = r * Math.cos(th) * Math.cos(ph) + 10;
-    pos[i * 3 + 1] = r * Math.sin(ph) - 20;
-    pos[i * 3 + 2] = r * Math.sin(th) * Math.cos(ph);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  return new THREE.Points(geo, new THREE.PointsMaterial({ color: '#c8d4ff', size: 1.2, sizeAttenuation: true, fog: false }));
 }
 
 // Drifting 0/1 motes over the network abyss.
@@ -416,7 +426,7 @@ function makeLaptop() {
   ctx.font = '80px sans-serif'; ctx.fillText('🐱', 210, 270);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(11, 7), new THREE.MeshBasicMaterial({ map: tex }));
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(11, 7), new THREE.MeshBasicMaterial({ map: tex, color: '#9a9ab0' }));
   screen.position.set(0, 4.2, -3.78);
   screen.rotation.x = -0.15;
   g.add(screen);

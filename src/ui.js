@@ -20,7 +20,7 @@ export function pointsFor(mistakes) {
 }
 
 export class UI {
-  constructor({ onStart, onRestart, onInteract, onRush }) {
+  constructor({ onStart, onRestart, onInteract, onRush, onExplore, onQuality, onPhoto }) {
     this.panel = $('#panel');
     this.panelTitle = $('#panel-title');
     this.panelLayer = $('#panel-layer');
@@ -32,6 +32,11 @@ export class UI {
     this.prompt.addEventListener('click', onInteract);
     $('#rush-btn').addEventListener('click', () => onRush('intro'));
     $('#end-rush-btn').addEventListener('click', () => onRush('end'));
+    $('#explore-btn').addEventListener('click', () => onExplore('intro'));
+    $('#end-explore-btn').addEventListener('click', () => onExplore('end'));
+    $('#quality-btn').addEventListener('click', onQuality);
+    $('#photo-btn').addEventListener('click', onPhoto);
+    $('#photo-exit').addEventListener('click', onPhoto);
     $('#glossary-btn').addEventListener('click', () => this.toggleGlossary());
     $('#glossary-close').addEventListener('click', () => this.toggleGlossary(false));
     const mute = $('#mute-btn');
@@ -44,6 +49,24 @@ export class UI {
     this.collected = new Set();
     this.buildLegend();
     this.renderGlossary();
+  }
+
+  setQuality(high) {
+    const b = $('#quality-btn');
+    b.classList.toggle('off', !high);
+    b.title = high ? 'Neon glow: on (click to turn off)' : 'Neon glow: off (click to turn on)';
+  }
+
+  setLandmarks(found, total) {
+    $('#landmark-count').textContent = `${found}/${total}`;
+  }
+
+  landmark(l) {
+    const el = $('#landmark');
+    el.innerHTML = `<div class="kicker">📍 Landmark discovered</div><b>${l.name}</b><p>${l.fact}</p>`;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
   }
 
   // ------------------------------------------------------------ glossary
