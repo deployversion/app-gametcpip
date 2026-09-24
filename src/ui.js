@@ -20,7 +20,7 @@ export function pointsFor(mistakes) {
 }
 
 export class UI {
-  constructor({ onStart, onRestart, onInteract, onRush }) {
+  constructor({ onStart, onRestart, onInteract, onRush, onExplore, onQuality }) {
     this.panel = $('#panel');
     this.panelTitle = $('#panel-title');
     this.panelLayer = $('#panel-layer');
@@ -32,6 +32,9 @@ export class UI {
     this.prompt.addEventListener('click', onInteract);
     $('#rush-btn').addEventListener('click', () => onRush('intro'));
     $('#end-rush-btn').addEventListener('click', () => onRush('end'));
+    $('#explore-btn').addEventListener('click', () => onExplore('intro'));
+    $('#end-explore-btn').addEventListener('click', () => onExplore('end'));
+    $('#quality-btn').addEventListener('click', onQuality);
     $('#glossary-btn').addEventListener('click', () => this.toggleGlossary());
     $('#glossary-close').addEventListener('click', () => this.toggleGlossary(false));
     const mute = $('#mute-btn');
@@ -46,6 +49,13 @@ export class UI {
     this.renderGlossary();
   }
 
+  setQuality(high, name = '', auto = false) {
+    const b = $('#quality-btn');
+    b.classList.toggle('off', !high);
+    const mode = `Graphics: ${name}${auto ? ' (auto)' : ''}`;
+    b.title = `${mode}. Glow ${high ? 'on (click to turn off)' : 'off (click to turn on)'}`;
+  }
+
   // ------------------------------------------------------------ glossary
   collect(id) {
     this.collected.add(id);
@@ -55,8 +65,8 @@ export class UI {
   renderGlossary(freshId = null) {
     $('#orb-count').textContent = `${this.collected.size}/${GLOSSARY.length}`;
     $('#glossary-progress').textContent = this.collected.size === GLOSSARY.length
-      ? 'You found every knowledge orb. Nice exploring!'
-      : `${this.collected.size} of ${GLOSSARY.length} found. Walk through the glowing ? orbs to unlock more.`;
+      ? 'You found every knowledge pearl. Nice exploring!'
+      : `${this.collected.size} of ${GLOSSARY.length} found. Swim through the glowing ? pearls to unlock more (Q sends a sonar ping).`;
     $('#glossary-list').innerHTML = GLOSSARY.map((g) => {
       const l = LAYERS[g.layer];
       if (!this.collected.has(g.id)) {
@@ -116,6 +126,11 @@ export class UI {
     this.toastEl.classList.add('show');
   }
 
+  setAttractCaption(text) {
+    const el = $('#attract-caption');
+    if (el.textContent !== text) el.textContent = text;
+  }
+
   hideIntro() {
     $('#intro').hidden = true;
     $('#hud').hidden = false;
@@ -129,7 +144,7 @@ export class UI {
     const m = Math.floor(seconds / 60);
     const s = String(Math.floor(seconds % 60)).padStart(2, '0');
     const bestText = best > score ? ` · your best: ${best}` : best === score && best > 0 ? ' · new personal best!' : '';
-    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes · ${this.collected.size}/${GLOSSARY.length} orbs${bestText}`;
+    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes · ${this.collected.size}/${GLOSSARY.length} pearls${bestText}`;
     const chip = (r) => `<span class="topic${r.mistakes ? ' retry' : ''}" style="--c:${LAYERS[r.layer].color}">${r.topic}</span>`;
     const retry = results.filter((r) => r.mistakes);
     $('#end-report').innerHTML = `
@@ -176,11 +191,13 @@ export class UI {
     if (station.side === 'network') this.panelLayer.textContent = station.router ? 'Router · Internet layer' : `Network · ${layer.name} layer`;
     else this.panelLayer.textContent = `Layer ${layer.num} · ${layer.name} · ${station.side}`;
     this.panel.hidden = false;
+    document.body.classList.add('panel-open');
     return new Promise((resolve) => {
       let i = 0;
       const next = () => {
         if (i >= station.steps.length) {
           this.panel.hidden = true;
+          document.body.classList.remove('panel-open');
           resolve();
           return;
         }
@@ -258,7 +275,13 @@ export class UI {
         const b = document.createElement('button');
         b.className = step.table ? 'row' : 'option';
         b.innerHTML = Array.isArray(opt.label) ? opt.label.map((c) => `<span>${c}</span>`).join('') : opt.label;
+        const optIndex = step.options.indexOf(opt);
+        const hover = (i) => hooks.onHover?.(step, i);
+        b.addEventListener('mouseenter', () => { if (!b.disabled) hover(optIndex); });
+        b.addEventListener('focus', () => { if (!b.disabled) hover(optIndex); });
+        b.addEventListener('mouseleave', () => hover(-1));
         b.addEventListener('click', () => {
+          hooks.onPick?.(step, optIndex, !!opt.correct);
           if (opt.correct) {
             b.classList.add('right');
             list.querySelectorAll('button').forEach((x) => { x.disabled = true; });
