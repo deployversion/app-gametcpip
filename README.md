@@ -14,13 +14,21 @@ Alice wants a cat picture from `catpics.example`. You are her HTTPS request:
 
 The **Packet anatomy** panel shows your current headers and their fields at all times. Correct first answers are worth 100 points, with fewer points for later tries and an explanation for every wrong answer.
 
-### The world
+### The world: a railway
 
-Every layer plateau has its own scenery: a neon **app city** with floating app windows and a DNS kiosk, a **container harbor** with a gantry crane, port-numbered containers and a conveyor of TCP segments, an **IP plaza** with a holographic globe, routing signposts and mailboxes, and a **server room** with blinking racks, a light-pulse cable tray, a Wi-Fi mast and a switch. Other people's packets wander the plateaus and zip along every network cable, all above an animated data ocean under an aurora sky, with bloom glow (toggle with ✨).
+**You are the train.** The locomotive is the request, and every layer couples a wagon behind it. A new header always goes straight behind the engine, in front of what was already there, just as a header goes in front of the data it wraps: HTTP cargo, then a TCP box van, an IP tank wagon and an Ethernet van, with a red-lamped caboose at the end for the frame's checksum (FCS). On the way up the receiver's stack the wagons are uncoupled one by one, and at every router the Ethernet van and caboose come off and a new pair is coupled on (a new frame per hop).
+
+Every layer is a different kind of railway place:
+- **Application** · the grand terminal, with a clock tower, an iron canopy, a DNS enquiries kiosk and a departures board where the platform is the port (the receiver's board shows arrivals)
+- **Transport** · the freight yard: segment wagons numbered by sequence number, containers labelled by port, a gantry crane, a turntable, and three semaphores that play out SYN, SYN-ACK, ACK
+- **Internet** · the junction: a signal box, fingerposts that read like a routing table, a TTL board counting down, and a signal gantry over diverging tracks
+- **Link** · the engine shed with MAC addresses on its doors, telegraph wires carrying pulses (bits on the wire) and a radio mast for Wi-Fi
+
+Locked gates are level crossings whose barriers lift when you solve the station, and each station's semaphore clears. The network is a valley of stone viaducts between junction towers; other trains run the lines, and when the congested line near R4 drops you, the train derails off the viaduct. Around it all: a golden-hour sky, mountains, a forest, villages, a river, birds, and two trains circling the whole valley on a ring viaduct. Bloom glow can be toggled with ✨.
 
 ### Extras
 
-- **Explore freely.** From the start or end screen: every gate opens, and ferry pads fly you across the network between Alice's side and the server's side. Sprint with `Shift`, jump with `Space`.
+- **Explore freely.** From the start or end screen: every gate opens, and Express platforms carry you across the network between Alice's side and the server's side. Sprint with `Shift`, jump with `Space`.
 
 - **Knowledge orbs.** 14 glowing `?` orbs are hidden on the plateaus. Walk through one to unlock a glossary card (DNS, TLS, UDP, flow control, IPv6, ICMP, switches, Wi-Fi, MTU, private addresses, traceroute, sockets, QUIC, HTTP status codes). Open the glossary with `G` or the 📖 button.
 - **Learning report.** The end screen lists every topic you practised, marks the ones that took more than one try as "worth another look", and remembers your best score.
@@ -57,10 +65,12 @@ npm run build    # static build in dist/
 | `src/glossary.js` | Knowledge orb cards and where they are hidden. |
 | `src/rush.js` | The Router Rush bonus game UI. |
 | `src/sound.js` | Synthesized sound effects. |
-| `src/world.js` | The 3D world: layer plateaus, stations, gates, routers, cables, network traffic and ferry pads. |
-| `src/environment.js` | Themed scenery per layer, wandering NPC packets and prop colliders. |
-| `src/effects.js` | Bloom post-processing, the sky dome and the data ocean shaders. |
-| `src/packet.js` | The player avatar: the data core plus one shell per header. |
+| `src/world.js` | The 3D world: platforms, stations, level crossings, junctions, viaducts, network traffic and Express platforms. |
+| `src/environment.js` | The railway scenery of each layer (terminal, freight yard, junction, engine shed). |
+| `src/landscape.js` | The valley around it: mountains, forest, villages, the ring railway, clouds and birds. |
+| `src/trains.js` | Shared rolling stock, track and steam. |
+| `src/packet.js` | You: the locomotive and the wagons that follow its trail. |
+| `src/effects.js` | Sky, valley floor and river, and the bloom post-processing. |
 | `src/game.js` | Game loop, movement, camera, station flow and network flight. |
 | `src/ui.js` | HUD, packet anatomy card and the station panel that runs the steps. |
 

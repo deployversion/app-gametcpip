@@ -157,7 +157,7 @@ export class UI {
     const order = ['link', 'internet', 'transport', 'app'];
     const present = order.filter((k) => packet[k]);
     if (!present.length) {
-      card.innerHTML = '<div class="empty">You are an empty spark. No data yet.</div>';
+      card.innerHTML = '<div class="empty">You are an empty engine. No cargo yet.</div>';
       return;
     }
     const outer = present[0];

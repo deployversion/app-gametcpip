@@ -54,6 +54,12 @@ class Sfx {
   whoosh() { this.tone(220, { dur: 0.5, type: 'triangle', vol: 0.4, slide: 880 }); }
   gate() { [392, 523, 659].forEach((f) => this.tone(f, { dur: 0.5, type: 'triangle', vol: 0.4 })); }
   drop() { this.tone(600, { dur: 0.7, type: 'sawtooth', vol: 0.5, slide: 60 }); }
+  // A two-tone steam whistle.
+  whistle() {
+    [587, 740].forEach((f) => this.tone(f, { dur: 0.7, type: 'triangle', vol: 0.18 }));
+    [587, 740].forEach((f) => this.tone(f * 1.003, { at: 0.05, dur: 0.6, type: 'sine', vol: 0.12 }));
+  }
+
   fanfare() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this.tone(f, { at: i * 0.11, dur: 0.25, type: 'triangle' })); }
 }
 

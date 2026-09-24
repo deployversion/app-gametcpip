@@ -9,7 +9,8 @@ import { tween, updateTweens, wait, ease } from './tween.js';
 import { makeLabel } from './labels.js';
 import { sfx } from './sound.js';
 import { RouterRush } from './rush.js';
-import { createComposer } from './effects.js';
+import { createComposer, SUN_DIR } from './effects.js';
+import { makeLoco, makeWagon } from './trains.js';
 
 const QUALITY_KEY = 'packetquest.quality';
 const SPRINT = 1.8;
@@ -187,6 +188,7 @@ export class Game {
     if (s) {
       s.icon.material.color.set('#ffffff');
       s.icon.material.emissive.set('#9fffc8');
+      s.clear?.();
     }
     this.state.stationIndex++;
     if (GATE_X[st.id] !== undefined && st.id !== 'send-link') this.openGate(st.id);
@@ -201,9 +203,9 @@ export class Game {
     const gate = this.world.gates.get(id);
     gate.open = true;
     sfx.gate();
-    this.ui.toast(this.state.side === 'sender' ? 'Gate open! Go down the ramp to the next layer.' : 'Gate open! Climb up to the next layer.');
-    await tween(0.8, (k) => { gate.group.scale.y = Math.max(0.001, 1 - k); }, ease.inOut);
-    gate.group.visible = false;
+    sfx.whistle();
+    this.ui.toast(this.state.side === 'sender' ? 'Barriers up! Ride down the ramp to the next layer.' : 'Barriers up! Climb up to the next layer.');
+    await tween(1.2, (k) => gate.raise(k), ease.inOut);
   }
 
   // ----------------------------------------------------------- network flight
@@ -217,7 +219,11 @@ export class Game {
       lens.push(l);
       total += l;
     }
-    if (cable) cable.material.color.set('#ffffff');
+    const lit = cable && { color: cable.material.color.clone(), opacity: cable.material.opacity };
+    if (cable) {
+      cable.material.color.set('#ffffff');
+      cable.material.opacity = 1;
+    }
     const dir = new THREE.Vector3();
     await tween(total / speed, (k) => {
       let d = k * total;
@@ -229,7 +235,10 @@ export class Game {
       this.moveDir = dir;
     }, ease.inOut);
     this.moveDir = null;
-    if (cable) cable.material.color.set('#4be1ff');
+    if (cable) {
+      cable.material.color.copy(lit.color);
+      cable.material.opacity = lit.opacity;
+    }
   }
 
   cableBetween(a, b) {
@@ -238,9 +247,10 @@ export class Game {
 
   async flyFromSender() {
     this.state.mode = 'cinematic';
-    this.ui.setObjective('Riding the wire as bits…');
+    this.ui.setObjective('Riding the rails as bits on the wire…');
     this.packet.setBits(true);
     sfx.whoosh();
+    sfx.whistle();
     const edge = NETWORK_EDGE.sender.clone().setY(HOVER);
     await this.travel([edge], 12);
     await this.travel([nodePosition('GW').add(new THREE.Vector3(0, 1.5, 0))], 16, this.world.cables.get('LAN-GW'));
@@ -270,7 +280,8 @@ export class Game {
       await this.travel([mid], 16, cable);
       this.packet.setBits(false);
       cable.material.color.set('#ff5d73');
-      this.ui.toast('Queue full at R4: packet dropped!');
+      cable.material.opacity = 0.9;
+      this.ui.toast('Line jammed near R4: the train is dropped!');
       await this.fxShatter();
       this.openStation();
       return;
@@ -320,19 +331,31 @@ export class Game {
     }
     this.cinematicCam = { pos: new THREE.Vector3(10, 70, 110), look: new THREE.Vector3(10, 0, 0) };
 
+    // The reply is a train too: an engine hauling the cat picture home.
     const reply = new THREE.Group();
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(1.2, 24, 16), new THREE.MeshStandardMaterial({ color: '#ff6fb5', emissive: '#ff6fb5', emissiveIntensity: 0.9 }));
+    const engine = makeLoco({ color: '#c2407e', trim: '#ffd27a' });
+    const cargo = makeWagon({ color: '#ff6fb5', title: '200 OK', detail: 'cat.png 🐱', kind: 'box' });
+    cargo.group.position.z = -3.2;
+    engine.group.position.y = -1;
+    cargo.group.position.y = -1;
     const tag = makeLabel('🐱 200 OK', { size: 1.4, color: '#fff', border: '#ff6fb5' });
-    tag.position.y = 2.6;
-    reply.add(ball, tag, new THREE.PointLight('#ff6fb5', 30, 20, 1.5));
+    tag.position.y = 3.2;
+    reply.add(engine.group, cargo.group, tag, new THREE.PointLight('#ff6fb5', 30, 20, 1.5));
+    reply.scale.setScalar(1.3);
     this.scene.add(reply);
+    sfx.whistle();
 
     const xs = [140, 132, 117, 104, 91, 78, 65, 52];
     const route = xs.map((x) => new THREE.Vector3(x, heightAt(x) + 2, 0));
     for (const id of ['SW', 'R4', 'R1', 'GW']) route.push(nodePosition(id).add(new THREE.Vector3(0, 2, 0)));
     for (const x of [-10, -23, -38, -53, -68, -83, -100, -118]) route.push(new THREE.Vector3(x, heightAt(x) + 2, 0));
     const curve = new THREE.CatmullRomCurve3(route);
-    await tween(7, (k) => reply.position.copy(curve.getPointAt(k)), ease.inOut);
+    const tangent = new THREE.Vector3();
+    await tween(7, (k) => {
+      reply.position.copy(curve.getPointAt(k));
+      curve.getTangentAt(Math.min(k, 0.999), tangent);
+      reply.rotation.y = Math.atan2(tangent.x, tangent.z);
+    }, ease.inOut);
     this.ui.showEnd({
       score: this.state.score, max: MAX_SCORE, mistakes: this.state.mistakes, seconds, results: this.state.results, best,
     });
@@ -348,11 +371,11 @@ export class Game {
     this.cinematicCam = null;
     for (const gate of this.world.gates.values()) {
       gate.open = true;
-      gate.group.visible = false;
+      gate.raise(1);
     }
     for (const f of this.world.ferries.values()) f.group.visible = true;
     this.updateBeacons();
-    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on a ferry pad to fly across the network.');
+    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on an Express platform to ride across the network.');
     if (from === 'end') this.placeAt(SPAWN.receiver);
   }
 
@@ -410,34 +433,52 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- effects
+  // The train derails: engine and wagons tumble off the viaduct and fade.
   async fxShatter() {
     sfx.drop();
-    const origin = this.packet.position.clone();
+    const cars = this.packet.snapshot();
     this.packet.body.visible = false;
     this.packet.tag.visible = false;
-    const colors = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffffff'];
-    const shards = Array.from({ length: 36 }, (_, i) => {
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(0.25, 0.25, 0.25),
-        new THREE.MeshBasicMaterial({ color: colors[i % colors.length], transparent: true }),
-      );
+    const dir = new THREE.Vector3(Math.sin(this.packet.heading), 0, Math.cos(this.packet.heading));
+    const side = new THREE.Vector3(dir.z, 0, -dir.x);
+    const mats = [];
+    cars.forEach((c, i) => {
+      c.traverse((o) => {
+        if (!o.material) return;
+        o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
+        for (const m of [o.material].flat()) {
+          m.transparent = true;
+          mats.push(m);
+        }
+      });
+      c.userData.v = dir.clone().multiplyScalar(6 - i).addScaledVector(side, (i % 2 ? 1 : -1) * (2 + Math.random() * 2)).setY(3 + Math.random() * 2);
+      c.userData.spin = new THREE.Vector3(Math.random() * 3, Math.random() * 2, Math.random() * 3);
+      this.scene.add(c);
+    });
+    const origin = this.packet.position.clone();
+    const sparks = Array.from({ length: 30 }, (_, i) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), new THREE.MeshBasicMaterial({ color: i % 2 ? '#ffd27a' : '#ff5d73', transparent: true }));
       m.position.copy(origin);
       m.userData.v = new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 8, (Math.random() - 0.5) * 10);
       this.scene.add(m);
+      mats.push(m.material);
       return m;
     });
     let last = 0;
-    await tween(1.6, (k, raw) => {
-      const dt = (raw - last) * 1.6;
+    await tween(2, (k, raw) => {
+      const dt = (raw - last) * 2;
       last = raw;
-      for (const m of shards) {
-        m.userData.v.y -= 18 * dt;
-        m.position.addScaledVector(m.userData.v, dt);
-        m.rotation.x += dt * 6;
-        m.material.opacity = 1 - raw;
+      for (const c of [...cars, ...sparks]) {
+        c.userData.v.y -= 16 * dt;
+        c.position.addScaledVector(c.userData.v, dt);
+        if (c.userData.spin) {
+          c.rotation.x += c.userData.spin.x * dt;
+          c.rotation.z += c.userData.spin.z * dt;
+        }
       }
+      for (const m of mats) m.opacity = Math.min(1, 1.6 - raw * 1.6);
     }, ease.linear);
-    shards.forEach((m) => this.scene.remove(m));
+    [...cars, ...sparks].forEach((m) => this.scene.remove(m));
   }
 
   async fxHandshake(flag, dir) {
@@ -678,7 +719,7 @@ export class Game {
     this.packet.update(dt, this.time, this.moveDir);
     this.world.update(this.time, dt);
     const p = this.packet.position;
-    this.world.sun.position.set(p.x + 25, p.y + 45, p.z + 20);
+    this.world.sun.position.set(p.x + SUN_DIR.x * 60, p.y + 45, p.z + SUN_DIR.z * 60);
     this.world.sun.target.position.copy(p);
     if (this.state.mode === 'rush') {
       const a = this.time * 0.12;
