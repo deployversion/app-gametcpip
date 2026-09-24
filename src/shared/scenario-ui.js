@@ -3,7 +3,7 @@
 // it only relies on the #intro and #end cards they all share.
 import { SCENARIO, SCENARIOS } from './scenarios.js';
 
-const MENU_URL = '../../';
+const MENU_URL = '../../index.html';
 const chapter = SCENARIOS.indexOf(SCENARIO) + 1;
 
 document.title = `Packet Quest · ${SCENARIO.title}`;

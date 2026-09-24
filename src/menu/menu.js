@@ -16,7 +16,7 @@ list.innerHTML = SCENARIOS.map((s, i) => {
   const score = best(s.id);
   return `
     <li class="scenario${score ? ' done' : ''}">
-      <a href="worlds/${s.world}/">
+      <a href="worlds/${s.world}/index.html">
         <div class="thumb" style="background-image:url(thumbs/${s.world}.jpg)">
           <span class="chapter">Chapter ${i + 1}</span>
           ${score ? `<span class="badge">✓ Best ${score}</span>` : ''}
