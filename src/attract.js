@@ -5,10 +5,10 @@ import * as THREE from 'three';
 import { PLATEAUS } from './world.js';
 
 const LAYER_NAMES = {
-  app: '4 · Application',
-  transport: '3 · Transport',
-  internet: '2 · Internet',
-  link: '1 · Link',
+  app: '4 · Application, the Bridge',
+  transport: '3 · Transport, the Cargo Bay',
+  internet: '2 · Internet, the Nav Deck',
+  link: '1 · Link, Engineering',
 };
 
 const LOOP_SECONDS = 90;
@@ -42,9 +42,9 @@ export class Flythrough {
     const plateau = PLATEAUS.find((p) => pos.x >= p.x0 - 6 && pos.x <= p.x1 + 6);
     look.y = plateau ? plateau.h : 0;
     let caption;
-    if (pos.z < -10) caption = 'The whole trip: down one stack, across the internet, up the other';
-    else if (plateau) caption = `Layer ${LAYER_NAMES[plateau.layer]} · ${plateau.side === 'sender' ? "Alice's laptop" : 'the web server'}`;
-    else if (pos.x > -2 && pos.x < 44) caption = 'The internet · routers pass you from hop to hop';
+    if (pos.z < -10) caption = 'The whole trip: down Terra-1, across open space, up Kepler Station';
+    else if (plateau) caption = `Deck ${LAYER_NAMES[plateau.layer]} · ${plateau.side === 'sender' ? 'Terra-1, Alice\'s station' : 'Kepler Station, the web server'}`;
+    else if (pos.x > -2 && pos.x < 44) caption = 'Open space · relay satellites pass you from hop to hop';
     else caption = this.caption;
     this.caption = caption;
     return { pos, look, caption };
