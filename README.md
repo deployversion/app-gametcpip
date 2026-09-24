@@ -25,6 +25,8 @@ Alice lives on **Terra-1**, a station orbiting a blue planet with city lights on
 
 Between the stations is the network: relay satellites (the routers) joined by laser links, drifting through an asteroid belt. Around it all are a procedural nebula sky with twinkling stars, a sun, a moon, a rotating habitat ring, solar arrays, thrusters, ships on far-off traffic lanes, distant stations and the odd shooting star. Maintenance drones and other packets float around the decks. Gravity is low, so jumps float. Bloom glow can be toggled with ✨.
 
+Graphics detail tunes itself: if the frame rate drops, the game lowers resolution, then glow, then shadows, until it runs smoothly. Clicking ✨ switches to manual. On phones and tablets a joystick, jump and use buttons appear, and you can pinch to zoom. While the start card is up, the camera flies over the whole journey with a caption naming each layer, and a soft generated soundscape (a drone, server hiss and data blips tuned to each layer) plays under the sound effects.
+
 ### Extras
 
 - **Explore freely.** From the start or end screen: every airlock opens, and a shuttle pad on each station flies you across the network to the other one. Sprint with `Shift`, jump with `Space`.
