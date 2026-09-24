@@ -7,6 +7,11 @@ import { PacketAvatar } from './packet.js';
 import { UI } from './ui.js';
 import { tween, updateTweens, wait, ease } from './tween.js';
 import { makeLabel } from './labels.js';
+import { sfx } from './sound.js';
+import { RouterRush } from './rush.js';
+
+const BEST_KEY = 'packetquest.bestScore';
+const ORB_RADIUS = 1.8;
 
 const WALK_SPEED = 12;
 const HOVER = 1.4;
@@ -33,6 +38,11 @@ export class Game {
       onStart: () => this.start(),
       onRestart: () => window.location.reload(),
       onInteract: () => this.tryInteract(),
+      onRush: (from) => this.startRush(from),
+    });
+    this.rush = new RouterRush({
+      onExit: () => this.exitRush(),
+      onCorrect: () => this.flashRandomRouter(),
     });
 
     this.cam = { yaw: -Math.PI / 2 + 0.45, pitch: 0.42, dist: 17, target: new THREE.Vector3() };
@@ -50,6 +60,7 @@ export class Game {
       score: 0,
       mistakes: 0,
       startedAt: 0,
+      results: [],
     };
     this.after = null;
 
@@ -73,6 +84,7 @@ export class Game {
       routerArrive: (index, patch) => this.routerArrive(index, patch),
       routeTo: (index, next) => { this.after = () => this.flyToNextHop(index, next); },
       finish: () => { this.after = () => this.finale(); },
+      retransmit: () => { this.after = () => this.flyRetransmit(); },
       fx: {
         handshake: (flag, dir) => this.fxHandshake(flag, dir),
         broadcast: () => this.fxBroadcast(),
@@ -104,6 +116,7 @@ export class Game {
   }
 
   start() {
+    sfx.unlock();
     this.ui.hideIntro();
     this.state.mode = 'walk';
     this.state.startedAt = performance.now();
@@ -140,13 +153,14 @@ export class Game {
     this.state.mode = 'panel';
     this.ui.showPrompt(null);
     this.ui.setActiveLayer(st.layer);
-    if (st.side === 'network') this.ui.setObjective(`${st.title}: choose the next hop`);
+    if (st.side === 'network') this.ui.setObjective(st.router ? `${st.title}: choose the next hop` : st.objective);
     this.moveTarget = null;
     this.keys.clear();
     await this.ui.runStation(st, {
       onEnter: (step) => step.onEnter?.(this.api),
       onSolve: (step) => step.onSolve?.(this.api),
-      onScore: (points) => {
+      onScore: (points, mistakes, step) => {
+        this.state.results.push({ topic: step.topic, layer: st.layer, mistakes });
         this.state.score += points;
         this.ui.setScore(this.state.score, MAX_SCORE);
       },
@@ -173,6 +187,7 @@ export class Game {
   async openGate(id) {
     const gate = this.world.gates.get(id);
     gate.open = true;
+    sfx.gate();
     this.ui.toast(this.state.side === 'sender' ? 'Gate open! Go down the ramp to the next layer.' : 'Gate open! Climb up to the next layer.');
     await tween(0.8, (k) => { gate.group.scale.y = Math.max(0.001, 1 - k); }, ease.inOut);
     gate.group.visible = false;
@@ -212,6 +227,7 @@ export class Game {
     this.state.mode = 'cinematic';
     this.ui.setObjective('Riding the wire as bits…');
     this.packet.setBits(true);
+    sfx.whoosh();
     const edge = NETWORK_EDGE.sender.clone().setY(HOVER);
     await this.travel([edge], 12);
     await this.travel([nodePosition('GW').add(new THREE.Vector3(0, 1.5, 0))], 16, this.world.cables.get('LAN-GW'));
@@ -232,8 +248,21 @@ export class Game {
     this.ui.setObjective(`Forwarding to ${next === 'SW' ? 'the server LAN' : next}…`);
     await wait(0.5);
     this.packet.setBits(true);
+    sfx.whoosh();
     const up = new THREE.Vector3(0, 1.5, 0);
-    await this.travel([nodePosition(next).add(up)], 16, this.cableBetween(from, next));
+    const cable = this.cableBetween(from, next);
+    if (this.station?.id === 'net-loss') {
+      // The link is congested: the packet gets dropped halfway.
+      const mid = nodePosition(from).add(up).lerp(nodePosition(next).add(up), 0.55);
+      await this.travel([mid], 16, cable);
+      this.packet.setBits(false);
+      cable.material.color.set('#ff5d73');
+      this.ui.toast('Queue full at R4: packet dropped!');
+      await this.fxShatter();
+      this.openStation();
+      return;
+    }
+    await this.travel([nodePosition(next).add(up)], 16, cable);
     if (next === 'SW') {
       const spawn = SPAWN.receiver.clone().setY(heightAt(SPAWN.receiver.x) + HOVER);
       await this.travel([NETWORK_EDGE.receiver.clone().setY(HOVER), spawn], 12, this.world.cables.get('SW-LAN'));
@@ -247,10 +276,35 @@ export class Game {
     this.openStation();
   }
 
+  async flyRetransmit() {
+    this.state.mode = 'cinematic';
+    this.ui.setObjective('Retransmitting…');
+    const up = new THREE.Vector3(0, 1.5, 0);
+    this.packet.position.copy(nodePosition('GW').add(up));
+    this.packet.body.visible = true;
+    this.packet.tag.visible = true;
+    this.packet.body.scale.setScalar(0.01);
+    await tween(0.4, (k) => this.packet.body.scale.setScalar(Math.max(0.01, k)), ease.back);
+    this.packet.setBits(true);
+    sfx.whoosh();
+    await this.travel([nodePosition('R1').add(up)], 26, this.cableBetween('GW', 'R1'));
+    await this.travel([nodePosition('R4').add(up)], 18, this.cableBetween('R1', 'R4'));
+    this.packet.setBits(false);
+    this.openStation();
+  }
+
   async finale() {
     this.state.mode = 'done';
     this.ui.setObjective('Mission complete! The cat picture is on its way back.');
     const seconds = (performance.now() - this.state.startedAt) / 1000;
+    sfx.fanfare();
+    let best = 0;
+    try {
+      best = Math.max(Number(localStorage.getItem(BEST_KEY)) || 0, this.state.score);
+      localStorage.setItem(BEST_KEY, String(best));
+    } catch {
+      best = this.state.score;
+    }
     this.cinematicCam = { pos: new THREE.Vector3(10, 70, 110), look: new THREE.Vector3(10, 0, 0) };
 
     const reply = new THREE.Group();
@@ -266,10 +320,66 @@ export class Game {
     for (const x of [-10, -23, -38, -53, -68, -83, -100, -118]) route.push(new THREE.Vector3(x, heightAt(x) + 2, 0));
     const curve = new THREE.CatmullRomCurve3(route);
     await tween(7, (k) => reply.position.copy(curve.getPointAt(k)), ease.inOut);
-    this.ui.showEnd({ score: this.state.score, max: MAX_SCORE, mistakes: this.state.mistakes, seconds });
+    this.ui.showEnd({
+      score: this.state.score, max: MAX_SCORE, mistakes: this.state.mistakes, seconds, results: this.state.results, best,
+    });
+  }
+
+  // ------------------------------------------------------------ router rush
+  startRush(from) {
+    this.rushReturn = { from, mode: this.state.mode, cam: this.cinematicCam };
+    document.querySelector(from === 'intro' ? '#intro' : '#end').hidden = true;
+    this.state.mode = 'rush';
+    this.cinematicCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(21, 0, 0) };
+    this.rush.start();
+  }
+
+  exitRush() {
+    const { from, mode, cam } = this.rushReturn;
+    this.state.mode = mode;
+    this.cinematicCam = cam;
+    document.querySelector(from === 'intro' ? '#intro' : '#end').hidden = false;
+  }
+
+  async flashRandomRouter() {
+    const routers = [...this.world.routers.values()];
+    const r = routers[Math.floor(Math.random() * routers.length)];
+    r.beacon.visible = true;
+    await wait(0.5);
+    r.beacon.visible = this.station?.router === r.id;
   }
 
   // ---------------------------------------------------------------- effects
+  async fxShatter() {
+    sfx.drop();
+    const origin = this.packet.position.clone();
+    this.packet.body.visible = false;
+    this.packet.tag.visible = false;
+    const colors = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffffff'];
+    const shards = Array.from({ length: 36 }, (_, i) => {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(0.25, 0.25, 0.25),
+        new THREE.MeshBasicMaterial({ color: colors[i % colors.length], transparent: true }),
+      );
+      m.position.copy(origin);
+      m.userData.v = new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 8, (Math.random() - 0.5) * 10);
+      this.scene.add(m);
+      return m;
+    });
+    let last = 0;
+    await tween(1.6, (k, raw) => {
+      const dt = (raw - last) * 1.6;
+      last = raw;
+      for (const m of shards) {
+        m.userData.v.y -= 18 * dt;
+        m.position.addScaledVector(m.userData.v, dt);
+        m.rotation.x += dt * 6;
+        m.material.opacity = 1 - raw;
+      }
+    }, ease.linear);
+    shards.forEach((m) => this.scene.remove(m));
+  }
+
   async fxHandshake(flag, dir) {
     const color = dir === 'out' ? LAYERS.transport.color : '#4be1ff';
     const token = makeLabel(flag, { size: 1.2, color: '#fff', bg: color });
@@ -306,6 +416,9 @@ export class Game {
     window.addEventListener('keydown', (e) => {
       if (e.target.closest?.('#panel')) return;
       const k = e.key.toLowerCase();
+      if (k === 'g' && ['walk', 'panel', 'cinematic'].includes(this.state.mode)) this.ui.toggleGlossary();
+      if (k === 'escape') this.ui.toggleGlossary(false);
+      if (this.ui.glossaryOpen) return;
       if (k === 'e' || k === 'enter') this.tryInteract();
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
         this.keys.add(k);
@@ -410,10 +523,28 @@ export class Game {
     }
     p.y = THREE.MathUtils.lerp(p.y, heightAt(p.x) + HOVER, Math.min(1, dt * 12));
 
+    for (const orb of this.world.orbs.values()) {
+      if (!orb.collected && Math.hypot(p.x - orb.group.position.x, p.z - orb.group.position.z) < ORB_RADIUS) this.collectOrb(orb);
+    }
+
     const st = this.station;
     const near = st && st.side !== 'network' && this.distanceToStation(st.id) <= INTERACT_RADIUS;
     this.ui.showPrompt(near ? st.title : null);
     this.ui.setActiveLayer(this.layerAt(p.x));
+  }
+
+  async collectOrb(orb) {
+    orb.collected = true;
+    sfx.collect();
+    this.ui.collect(orb.entry.id);
+    this.ui.toast(`📖 New card: ${orb.entry.term} (press G or tap 📖)`);
+    const start = orb.group.scale.x;
+    await tween(0.5, (k) => {
+      orb.group.scale.setScalar(start * (1 + k * 1.5));
+      orb.gem.material.opacity = 1 - k;
+      orb.halo.material.opacity = 1 - k;
+    }, ease.out);
+    orb.group.visible = false;
   }
 
   layerAt(x) {
@@ -466,6 +597,10 @@ export class Game {
     const p = this.packet.position;
     this.world.sun.position.set(p.x + 25, p.y + 45, p.z + 20);
     this.world.sun.target.position.copy(p);
+    if (this.state.mode === 'rush') {
+      const a = this.time * 0.12;
+      this.cinematicCam.pos.set(21 + Math.cos(a) * 55, 32, Math.sin(a) * 55);
+    }
     this.updateCamera(dt);
     this.renderer.render(this.scene, this.camera);
   }

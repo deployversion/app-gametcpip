@@ -8,7 +8,7 @@
 //
 // Hooks receive the game API `g` (see Game#api in src/game.js).
 
-import { longestPrefixMatch, segmentSeqNumbers, segmentCount, ttlAfterHops } from './logic/net.js';
+import { longestPrefixMatch, segmentSeqNumbers, segmentCount, ttlAfterHops, firstMatchingRule } from './logic/net.js';
 
 export const LAYERS = {
   app: { name: 'Application', num: 4, color: '#b56cff', pdu: 'Data', header: 'HTTP' },
@@ -36,6 +36,7 @@ export const ROUTES = [
   {
     id: 'GW',
     name: 'Home router',
+    topic: 'Routing: the default route',
     table: [
       { dest: '192.168.1.0/24', hop: 'LAN (deliver directly)' },
       { dest: '0.0.0.0/0', hop: 'R1 (your ISP)' },
@@ -46,6 +47,7 @@ export const ROUTES = [
   {
     id: 'R1',
     name: 'ISP router R1',
+    topic: 'Routing: longest prefix match',
     table: [
       { dest: '10.0.0.0/8', hop: 'R2' },
       { dest: '203.0.0.0/8', hop: 'R3' },
@@ -58,6 +60,7 @@ export const ROUTES = [
   {
     id: 'R4',
     name: 'Backbone router R4',
+    topic: 'Routing: direct delivery',
     table: [
       { dest: '203.0.113.128/25', hop: 'R6' },
       { dest: '203.0.113.0/25', hop: 'Server LAN (deliver directly)' },
@@ -68,10 +71,19 @@ export const ROUTES = [
   },
 ];
 
+// The web server's host firewall. Rules are checked top to bottom and the
+// first rule that matches decides.
+export const FIREWALL = [
+  { action: 'allow', proto: 'tcp', port: 22, from: '10.0.0.0/8' },
+  { action: 'allow', proto: 'tcp', port: 443, from: '0.0.0.0/0' },
+  { action: 'deny', proto: 'any', port: 'any', from: '0.0.0.0/0' },
+];
+
 export function routeAnswer(route) {
   return longestPrefixMatch(route.table, NET.server.ip);
 }
 
+const FIREWALL_ANSWER = firstMatchingRule(FIREWALL, { proto: 'tcp', port: NET.dstPort, src: NET.gateway.publicIp });
 const SEQS = segmentSeqNumbers(NET.clientIsn, NET.requestBytes, NET.mss);
 const ARRIVAL_TTL = ttlAfterHops(NET.ttl, ROUTES.length);
 
@@ -79,6 +91,7 @@ function routeStep(route, index) {
   const best = routeAnswer(route);
   return {
     type: 'choice',
+    topic: route.topic,
     text: `Destination IP is <b>${NET.server.ip}</b>. Pick the routing table row this router uses.`,
     table: { headers: ['Destination', 'Next hop'] },
     options: route.table.map((row, i) => {
@@ -92,6 +105,61 @@ function routeStep(route, index) {
     onSolve: (g) => g.routeTo(index, route.options[best]),
   };
 }
+
+// A link on the way is congested. The packet is dropped and TCP has to
+// notice and send a copy.
+const LOSS_STATION = {
+  id: 'net-loss',
+  side: 'network',
+  layer: 'transport',
+  title: 'Dropped!',
+  objective: 'Recover from packet loss',
+  steps: [
+    {
+      type: 'info',
+      text: `<p>💥 The link to R4 is congested. Its queue was full, so the router simply <b>dropped</b> you. This happens all the time on the internet.</p>
+        <p>Routers don't tell anyone when they drop a packet for lack of space. So who fixes this?</p>`,
+      button: 'Think…',
+    },
+    {
+      type: 'choice',
+      topic: 'Detecting loss',
+      text: "How does Alice's laptop find out that the segment was lost?",
+      options: [
+        { label: 'No ACK comes back before its retransmission timer runs out', correct: true, why: 'TCP starts a timer for every segment it sends. When no ACK arrives in time (or the receiver keeps repeating the same ACK), TCP concludes the segment was lost.' },
+        { label: 'The router sends an error message', why: 'A router that drops a packet because its queue is full stays silent. IP is a "best effort" service: no delivery promises.' },
+        { label: 'The server sends a "missing!" message (a NACK)', why: 'TCP has no negative acknowledgements. The receiver only ever says what it did receive, with ACKs.' },
+        { label: 'It never finds out', why: 'That is how UDP behaves. TCP promises reliable delivery, so it keeps track of every byte.' },
+      ],
+    },
+    {
+      type: 'choice',
+      topic: 'Retransmission',
+      text: `TCP sends a copy of the lost segment. Which sequence number does the copy carry?`,
+      options: [
+        { label: `The same one: seq=${SEQS[0]}`, correct: true, why: 'A retransmission is the same bytes, so it gets the same sequence number. The receiver can then slot it in the right place, and ignore it if it turns out to be a duplicate.' },
+        { label: `A new one: seq=${SEQS[SEQS.length - 1] + NET.mss}`, why: 'New sequence numbers are for new bytes. These are the same bytes again.' },
+        { label: 'seq=0, to start over', why: 'The connection is fine; only one segment went missing. TCP resends just that one.' },
+      ],
+    },
+    {
+      type: 'choice',
+      topic: 'Congestion control',
+      text: 'After a loss, TCP also sends <i>slower</i> for a while. Why?',
+      options: [
+        { label: 'Loss usually means the network is congested', correct: true, why: 'TCP shrinks its congestion window when it sees loss, then carefully speeds up again. If every sender did not back off, the internet would jam completely (a "congestion collapse").' },
+        { label: 'To save battery', why: 'Slowing down is about sharing the network fairly, not about power.' },
+        { label: 'Because the server asked it to', why: 'The server can limit TCP with its receive window, but here the cause is congestion in the network, which TCP detects on its own.' },
+      ],
+    },
+    {
+      type: 'info',
+      text: `<p>A fresh copy of you races the same path again: home router, R1, and this time the queue at R4 has room.</p>`,
+      button: 'Retransmit!',
+      onSolve: (g) => g.retransmit(),
+    },
+  ],
+};
 
 export const STATIONS = [
   // ---------------------------------------------------------------- sender
@@ -111,6 +179,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'DNS lookup',
         text: `The browser only knows the name <code>${NET.server.name}</code>. What has to happen first to find the server's address?`,
         options: [
           { label: 'A DNS lookup', correct: true, why: `DNS turns names into IP addresses. The resolver answers: ${NET.server.name} is ${NET.server.ip}.` },
@@ -122,6 +191,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'Application ports',
         text: 'Which application protocol and port does the browser use for a secure web page?',
         options: [
           { label: 'HTTPS on port 443', correct: true, why: 'HTTPS is HTTP inside TLS encryption. Web servers listen for it on the well-known port 443.' },
@@ -154,6 +224,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'TCP handshake',
         text: 'Which TCP flag do you send first to open the connection?',
         options: [
           { label: 'SYN', correct: true, why: `SYN = "synchronize". It carries your starting sequence number, seq=${NET.clientIsn}.` },
@@ -171,6 +242,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'ACK numbers',
         text: `Finish the handshake with an ACK. Which acknowledgement number do you send back?`,
         options: [
           { label: `ack=${NET.serverIsn + 1}`, correct: true, why: `An ACK number is "the next byte I expect". The SYN used up seq ${NET.serverIsn}, so you expect ${NET.serverIsn + 1}.` },
@@ -182,6 +254,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'Segmentation (MSS)',
         text: `Connection open! The request is ${NET.requestBytes} bytes, but each segment can carry at most ${NET.mss} bytes (the MSS). How many segments does TCP need?`,
         options: [
           { label: String(segmentCount(NET.requestBytes, NET.mss)), correct: true, why: `${NET.requestBytes} / ${NET.mss} = ${(NET.requestBytes / NET.mss).toFixed(2)}, rounded up. Each segment gets a sequence number: ${SEQS.join(', ')}. You ride in the first one.` },
@@ -212,6 +285,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'IP destination address',
         text: 'Which destination IP address goes in the header?',
         options: [
           { label: NET.server.ip, correct: true, why: 'The IP destination is always the final destination: the web server DNS told you about.' },
@@ -221,6 +295,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'TTL',
         text: `Every packet gets a TTL (time to live) of ${NET.ttl}. Each router lowers it by one. What happens if it reaches 0?`,
         options: [
           { label: 'The router drops it and reports back', correct: true, why: 'The router discards the packet and sends an ICMP "Time Exceeded" message to the sender. This stops packets looping forever. The traceroute tool is built on this trick.' },
@@ -230,6 +305,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'Local or remote? (subnet mask)',
         text: `Alice's laptop is <code>${NET.client.ip}/${NET.client.prefix}</code>. Is <code>${NET.server.ip}</code> on the same local network?`,
         options: [
           { label: 'No, send it to the default gateway', correct: true, why: `With a /24 mask the local network is 192.168.1.x. ${NET.server.ip} is outside it, so the packet goes to the default gateway (the home router, ${NET.gateway.ip}).` },
@@ -257,6 +333,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'ARP',
         text: `You need the MAC address of the gateway (${NET.gateway.ip}). How do you find it?`,
         options: [
           { label: 'Broadcast an ARP request', correct: true, why: `"Who has ${NET.gateway.ip}?" goes to every device on the LAN (ff:ff:ff:ff:ff:ff). The router answers: "That's me, ${NET.gateway.mac}".` },
@@ -267,6 +344,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'Next-hop MAC address',
         text: 'Which destination MAC goes in the Ethernet frame?',
         options: [
           { label: `The gateway: ${NET.gateway.mac}`, correct: true, why: 'A frame only travels one hop. The IP header keeps the final destination; the MAC header names the next device on this link.' },
@@ -286,7 +364,7 @@ export const STATIONS = [
     ],
   },
   // --------------------------------------------------------------- network
-  ...ROUTES.map((route, index) => ({
+  ...ROUTES.flatMap((route, index) => [{
     id: `route-${route.id}`,
     side: 'network',
     layer: 'internet',
@@ -305,7 +383,7 @@ export const STATIONS = [
       },
       routeStep(route, index),
     ],
-  })),
+  }, ...(route.id === 'R1' ? [LOSS_STATION] : [])]),
   // -------------------------------------------------------------- receiver
   {
     id: 'recv-link',
@@ -321,6 +399,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'Frame filtering and FCS',
         text: 'Three frames arrive at the network card. Which one does it accept?',
         options: [
           { label: `dst ${NET.server.mac}, FCS ok`, correct: true, why: 'Addressed to this card and the checksum matches. Accepted!' },
@@ -330,6 +409,7 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'Decapsulation order',
         text: 'Which header does the Link layer remove before passing you up?',
         options: [
           { label: 'Ethernet', correct: true, why: 'Each layer removes only its own header: the outermost one comes off first.' },
@@ -349,6 +429,7 @@ export const STATIONS = [
     steps: [
       {
         type: 'choice',
+        topic: 'TTL on arrival',
         text: `The packet left Alice's laptop with TTL ${NET.ttl} and passed ${ROUTES.length} routers. What TTL does the server see?`,
         options: [
           { label: String(ARRIVAL_TTL), correct: true, why: `${NET.ttl} − ${ROUTES.length} routers = ${ARRIVAL_TTL}. Every router lowered it by one.` },
@@ -359,6 +440,20 @@ export const STATIONS = [
       },
       {
         type: 'choice',
+        topic: 'Firewall rules',
+        text: `The server's firewall checks its rules from top to bottom, and the <b>first match wins</b>. You come from <code>${NET.gateway.publicIp}</code> to TCP port <code>${NET.dstPort}</code>. Which rule decides your fate?`,
+        table: { headers: ['Rule', 'Match'] },
+        options: FIREWALL.map((r, i) => {
+          const label = [`${i + 1}. ${r.action.toUpperCase()}`, `${r.proto} port ${r.port} from ${r.from}`];
+          if (i === FIREWALL_ANSWER) return { label, correct: true, why: 'TCP to port 443 from anywhere: that matches, so you are allowed in. The rules below it are never checked.' };
+          if (i < FIREWALL_ANSWER) return { label, why: `This rule is for port ${r.port} from ${r.from}. You are neither, so the firewall moves on to the next rule.` };
+          return { label, why: 'This rule would match everything, but the firewall stops at the first match, which comes earlier. A "deny all" at the bottom catches everything nobody allowed.' };
+        }),
+        onSolve: (g) => g.toast('Firewall: ALLOW'),
+      },
+      {
+        type: 'choice',
+        topic: 'IP protocol field',
         text: 'The IP header\'s protocol field says <code>6</code>. Who gets the payload?',
         options: [
           { label: 'TCP', correct: true, why: 'Protocol number 6 is TCP (17 is UDP, 1 is ICMP). IP strips its header and hands the segment to TCP.' },
@@ -378,12 +473,14 @@ export const STATIONS = [
     steps: [
       {
         type: 'order',
+        topic: 'TCP reassembly',
         text: 'The three segments took different paths and arrived out of order. Put them back in order by sequence number.',
         items: SEQS.map((s, i) => `seq=${s} (segment ${i + 1})`),
         why: 'TCP uses sequence numbers to rebuild the byte stream in the right order, and acknowledges what it received. Missing segments are sent again.',
       },
       {
         type: 'choice',
+        topic: 'Ports identify programs',
         text: `Which program receives the data? The TCP header says destination port <code>${NET.dstPort}</code>.`,
         options: [
           { label: 'The web server (443)', correct: true, why: 'Ports identify programs. The web server is listening on 443. TCP strips its header and hands over the data.' },
@@ -409,6 +506,7 @@ export const STATIONS = [
       },
       {
         type: 'order',
+        topic: 'Encapsulation order',
         text: 'Final test! On the way down, in which order were the headers added?',
         items: ['HTTP data (Application)', 'TCP header (Transport)', 'IP header (Internet)', 'Ethernet frame (Link)'],
         why: 'Down the stack, each layer wraps what it gets from the layer above. The receiver unwraps in the opposite order.',

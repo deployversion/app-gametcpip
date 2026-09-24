@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LAYERS, STATIONS } from './content.js';
 import { makeLabel, gridTexture } from './labels.js';
+import { GLOSSARY } from './glossary.js';
 
 // The world is the TCP/IP stack turned into terrain: the sender's layers are
 // plateaus you walk *down*, the network is an abyss of routers you fly
@@ -293,7 +294,34 @@ export function buildWorld(scene) {
 
   scene.add(makeBitDust(animated));
 
+  // --- knowledge orbs ------------------------------------------------------
+  const orbs = new Map();
+  for (const entry of GLOSSARY) {
+    const color = LAYERS[entry.layer].color;
+    const g = new THREE.Group();
+    g.position.set(entry.x, heightAt(entry.x) + 1.6, entry.z);
+    const gem = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.55, 0),
+      new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: color, emissiveIntensity: 1.2, roughness: 0.2, transparent: true }),
+    );
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.05, 8, 40), new THREE.MeshBasicMaterial({ color, transparent: true }));
+    const q = makeLabel('?', { size: 0.9, color, bg: null, font: 900 });
+    q.position.y = 1.3;
+    g.add(gem, halo, q);
+    scene.add(g);
+    orbs.set(entry.id, { entry, group: g, gem, halo, collected: false });
+    const phase = entry.x * 0.37;
+    animated.push((t) => {
+      if (!g.visible) return;
+      gem.rotation.y = t * 1.5 + phase;
+      gem.rotation.x = t * 0.7;
+      halo.rotation.x = Math.PI / 2 + Math.sin(t + phase) * 0.4;
+      g.position.y = heightAt(entry.x) + 1.6 + Math.sin(t * 2 + phase) * 0.25;
+    });
+  }
+
   return {
+    orbs,
     sun,
     walkables,
     stations,

@@ -1,4 +1,6 @@
 import { LAYERS } from './content.js';
+import { GLOSSARY } from './glossary.js';
+import { sfx } from './sound.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -18,7 +20,7 @@ export function pointsFor(mistakes) {
 }
 
 export class UI {
-  constructor({ onStart, onRestart, onInteract }) {
+  constructor({ onStart, onRestart, onInteract, onRush }) {
     this.panel = $('#panel');
     this.panelTitle = $('#panel-title');
     this.panelLayer = $('#panel-layer');
@@ -28,7 +30,48 @@ export class UI {
     $('#start-btn').addEventListener('click', onStart);
     $('#restart-btn').addEventListener('click', onRestart);
     this.prompt.addEventListener('click', onInteract);
+    $('#rush-btn').addEventListener('click', () => onRush('intro'));
+    $('#end-rush-btn').addEventListener('click', () => onRush('end'));
+    $('#glossary-btn').addEventListener('click', () => this.toggleGlossary());
+    $('#glossary-close').addEventListener('click', () => this.toggleGlossary(false));
+    const mute = $('#mute-btn');
+    const paintMute = () => { mute.textContent = sfx.muted ? '🔇' : '🔊'; };
+    mute.addEventListener('click', () => {
+      sfx.setMuted(!sfx.muted);
+      paintMute();
+    });
+    paintMute();
+    this.collected = new Set();
     this.buildLegend();
+    this.renderGlossary();
+  }
+
+  // ------------------------------------------------------------ glossary
+  collect(id) {
+    this.collected.add(id);
+    this.renderGlossary(id);
+  }
+
+  renderGlossary(freshId = null) {
+    $('#orb-count').textContent = `${this.collected.size}/${GLOSSARY.length}`;
+    $('#glossary-progress').textContent = this.collected.size === GLOSSARY.length
+      ? 'You found every knowledge orb. Nice exploring!'
+      : `${this.collected.size} of ${GLOSSARY.length} found. Walk through the glowing ? orbs to unlock more.`;
+    $('#glossary-list').innerHTML = GLOSSARY.map((g) => {
+      const l = LAYERS[g.layer];
+      if (!this.collected.has(g.id)) {
+        return `<div class="gcard locked" style="--c:${l.color}"><b>???</b>Hidden somewhere on a ${l.name} layer plateau.</div>`;
+      }
+      return `<div class="gcard${g.id === freshId ? ' fresh' : ''}" style="--c:${l.color}"><b>${g.term}</b>${g.text}</div>`;
+    }).join('');
+  }
+
+  toggleGlossary(open = $('#glossary').hidden) {
+    $('#glossary').hidden = !open;
+  }
+
+  get glossaryOpen() {
+    return !$('#glossary').hidden;
   }
 
   buildLegend() {
@@ -78,14 +121,20 @@ export class UI {
     $('#hud').hidden = false;
   }
 
-  showEnd({ score, max, mistakes, seconds }) {
+  showEnd({ score, max, mistakes, seconds, results, best }) {
     const pct = score / max;
     const stars = pct >= 0.9 ? 3 : pct >= 0.7 ? 2 : 1;
     $('#end-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
     $('#end-score').textContent = `${score} / ${max} points`;
     const m = Math.floor(seconds / 60);
     const s = String(Math.floor(seconds % 60)).padStart(2, '0');
-    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes`;
+    const bestText = best > score ? ` · your best: ${best}` : best === score && best > 0 ? ' · new personal best!' : '';
+    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes · ${this.collected.size}/${GLOSSARY.length} orbs${bestText}`;
+    const chip = (r) => `<span class="topic${r.mistakes ? ' retry' : ''}" style="--c:${LAYERS[r.layer].color}">${r.topic}</span>`;
+    const retry = results.filter((r) => r.mistakes);
+    $('#end-report').innerHTML = `
+      <h3>What you practised</h3><div class="report-grid">${results.map(chip).join('')}</div>
+      ${retry.length ? `<h3>Worth another look</h3><div class="report-grid">${retry.map(chip).join('')}</div>` : '<h3>Every topic right on the first try. Impressive!</h3>'}`;
     $('#end').hidden = false;
   }
 
@@ -124,7 +173,8 @@ export class UI {
     const layer = LAYERS[station.layer];
     this.panel.style.setProperty('--c', station.side === 'network' ? '#4be1ff' : layer.color);
     this.panelTitle.textContent = station.title;
-    this.panelLayer.textContent = station.side === 'network' ? 'Router · Internet layer' : `Layer ${layer.num} · ${layer.name} · ${station.side}`;
+    if (station.side === 'network') this.panelLayer.textContent = station.router ? 'Router · Internet layer' : `Network · ${layer.name} layer`;
+    else this.panelLayer.textContent = `Layer ${layer.num} · ${layer.name} · ${station.side}`;
     this.panel.hidden = false;
     return new Promise((resolve) => {
       let i = 0;
@@ -187,7 +237,8 @@ export class UI {
     const finish = (why) => {
       feedback.className = 'feedback good';
       feedback.innerHTML = `<b>${['Perfect!', 'Correct!', 'Got it!'][Math.min(mistakes, 2)]} +${pointsFor(mistakes)}</b> ${why}`;
-      hooks.onScore(pointsFor(mistakes), mistakes);
+      hooks.onScore(pointsFor(mistakes), mistakes, step);
+      sfx.correct();
       continueBtn('Next', async () => {
         await hooks.onSolve(step);
         next();
@@ -215,6 +266,7 @@ export class UI {
           } else {
             mistakes++;
             hooks.onMistake();
+            sfx.wrong();
             b.classList.add('wrong');
             b.disabled = true;
             feedback.className = 'feedback bad';
@@ -244,12 +296,14 @@ export class UI {
             li.textContent = item;
             placed.appendChild(li);
             b.remove();
+            sfx.click();
             feedback.className = 'feedback';
             feedback.textContent = '';
             if (pos === step.items.length) finish(step.why);
           } else {
             mistakes++;
             hooks.onMistake();
+            sfx.wrong();
             b.classList.remove('shake');
             void b.offsetWidth;
             b.classList.add('shake');

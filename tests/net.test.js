@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ipToInt, cidrContains, longestPrefixMatch, sameSubnet, segmentCount, segmentSeqNumbers, ttlAfterHops,
+  ipToInt, cidrContains, longestPrefixMatch, sameSubnet, segmentCount, segmentSeqNumbers, ttlAfterHops, firstMatchingRule, parseCidr,
 } from '../src/logic/net.js';
 
 test('ipToInt converts dotted quads', () => {
@@ -38,4 +38,16 @@ test('segmentation and TTL', () => {
   assert.deepEqual(segmentSeqNumbers(1000, 4000, 1460), [1001, 2461, 3921]);
   assert.equal(ttlAfterHops(64, 3), 61);
   assert.equal(ttlAfterHops(1, 3), 0);
+});
+
+test('firstMatchingRule returns the first rule that matches', () => {
+  const rules = [
+    { action: 'allow', proto: 'tcp', port: 22, from: '10.0.0.0/8' },
+    { action: 'allow', proto: 'tcp', port: 443, from: '0.0.0.0/0' },
+    { action: 'deny', proto: 'any', port: 'any', from: '0.0.0.0/0' },
+  ];
+  assert.equal(firstMatchingRule(rules, { proto: 'tcp', port: 443, src: '198.51.100.7' }), 1);
+  assert.equal(firstMatchingRule(rules, { proto: 'tcp', port: 22, src: '10.1.2.3' }), 0);
+  assert.equal(firstMatchingRule(rules, { proto: 'tcp', port: 22, src: '8.8.8.8' }), 2);
+  assert.equal(firstMatchingRule(rules, { proto: 'udp', port: 53, src: '8.8.8.8' }), 2);
 });

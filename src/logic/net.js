@@ -67,3 +67,12 @@ export const HANDSHAKE = ['SYN', 'SYN-ACK', 'ACK'];
 export function ttlAfterHops(ttl, hops) {
   return Math.max(0, ttl - hops);
 }
+
+// Firewall rules are checked in order; the first rule that matches wins.
+// A rule field of 'any' matches everything.
+export function firstMatchingRule(rules, { proto, port, src }) {
+  return rules.findIndex((r) =>
+    (r.proto === 'any' || r.proto === proto)
+    && (r.port === 'any' || r.port === port)
+    && cidrContains(r.from, src));
+}

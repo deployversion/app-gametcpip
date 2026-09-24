@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { STATIONS, ROUTES, NET, routeAnswer } from '../src/content.js';
+import { STATIONS, ROUTES, NET, FIREWALL, routeAnswer } from '../src/content.js';
+import { GLOSSARY } from '../src/glossary.js';
+import { PATH_HALF_WIDTH, SIDE_BOUNDS, STATION_X } from '../src/world.js';
 import { cidrContains } from '../src/logic/net.js';
 
 test('every choice step has exactly one correct answer and an explanation per option', () => {
@@ -46,5 +48,38 @@ test('routing steps mark the longest prefix match as correct', () => {
     const st = STATIONS.find((s) => s.id === `route-${route.id}`);
     const choice = st.steps.find((s) => s.type === 'choice');
     assert.equal(choice.options.findIndex((o) => o.correct), routeAnswer(route));
+  }
+});
+
+test('every question has a topic for the learning report', () => {
+  for (const st of STATIONS) {
+    for (const step of st.steps.filter((s) => s.type !== 'info')) assert.ok(step.topic, `${st.id} step without topic`);
+  }
+});
+
+test('the packet loss detour sits between R1 and R4', () => {
+  const ids = STATIONS.map((s) => s.id);
+  assert.equal(ids.indexOf('net-loss'), ids.indexOf('route-R1') + 1);
+  assert.equal(ids.indexOf('route-R4'), ids.indexOf('net-loss') + 1);
+  const loss = STATIONS.find((s) => s.id === 'net-loss');
+  assert.ok(loss.steps.at(-1).onSolve, 'loss station must trigger the retransmission');
+});
+
+test('the firewall question marks the first matching rule', () => {
+  const st = STATIONS.find((s) => s.id === 'recv-internet');
+  const fw = st.steps.find((s) => s.topic === 'Firewall rules');
+  const correct = fw.options.findIndex((o) => o.correct);
+  assert.equal(FIREWALL[correct].port, NET.dstPort);
+});
+
+test('glossary orbs are unique and reachable', () => {
+  assert.equal(new Set(GLOSSARY.map((g) => g.id)).size, GLOSSARY.length);
+  for (const g of GLOSSARY) {
+    assert.ok(Math.abs(g.z) <= PATH_HALF_WIDTH, `${g.id} off the path`);
+    const [lo, hi] = g.x < 20 ? SIDE_BOUNDS.sender : SIDE_BOUNDS.receiver;
+    assert.ok(g.x >= lo && g.x <= hi, `${g.id} outside the walkable area`);
+    for (const x of Object.values(STATION_X)) {
+      assert.ok(Math.hypot(g.x - x, g.z + 5.5) > 3, `${g.id} overlaps a station`);
+    }
   }
 });

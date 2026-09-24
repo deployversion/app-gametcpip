@@ -29,6 +29,12 @@ button.primary {
 button.primary:hover { filter: brightness(1.1); }
 button.primary:disabled { opacity: .5; cursor: default; }
 button.big { padding: 14px 30px; font-size: 1.1rem; }
+button.secondary { background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 10px; padding: 10px 20px; font-weight: 700; }
+button.secondary:hover { border-color: var(--accent); }
+.actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.small { font-size: .85rem; }
+.hud-btn { pointer-events: auto; background: var(--glass); border: 1px solid var(--line); border-radius: 12px; padding: 7px 12px; backdrop-filter: blur(8px); }
+.hud-btn:hover { border-color: var(--accent); }
 
 /* ---------------------------------------------------------------- HUD */
 #topbar {
@@ -131,9 +137,40 @@ button:disabled { cursor: default; }
 .end-score { font-size: 1.4rem; font-weight: 800; }
 .muted { color: var(--muted); }
 
+/* ------------------------------------------------------------ glossary */
+.overlay .card.wide { max-width: 760px; }
+#glossary-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 14px 0 18px; text-align: left; }
+.gcard { border: 1px solid var(--line); border-left: 5px solid var(--c); border-radius: 10px; padding: 10px 12px; background: rgba(255,255,255,.04); font-size: .88rem; line-height: 1.45; }
+.gcard b { display: block; color: var(--c); font-size: 1rem; margin-bottom: 2px; }
+.gcard.locked { opacity: .55; }
+.gcard.locked b { color: var(--muted); }
+.gcard.fresh { animation: pop .5s ease; box-shadow: 0 0 0 2px var(--c); }
+
+/* ---------------------------------------------------------------- report */
+#end-report { text-align: left; margin: 14px 0; }
+#end-report h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin: 12px 0 6px; }
+.report-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.topic { font-size: .8rem; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.topic.retry { border-style: dashed; opacity: .85; }
+.topic::before { content: '✓ '; color: var(--good); font-weight: 800; }
+.topic.retry::before { content: '↻ '; color: #ffb454; }
+
+/* ------------------------------------------------------------------ rush */
+.rush-card { text-align: left; }
+.rush-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.rush-level { font-weight: 800; font-size: 1.2rem; }
+.rush-stats { display: flex; gap: 14px; font-size: 1.05rem; }
+.rush-bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.1); margin: 10px 0 14px; overflow: hidden; }
+.rush-bar i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff5d73, #ffd166, #35d07f); transition: width .2s linear; }
+.rush-q { font-size: 1.05rem; }
+#rush .options { --c: var(--accent); }
+.options .row.reveal { border-color: var(--good) !important; background: rgba(53, 208, 127, .2) !important; }
+#rush-over { text-align: center; }
+
 /* -------------------------------------------------------------- mobile */
 @media (max-width: 760px) {
   .brand, #help { display: none; }
+  .score, .hud-btn { padding: 6px 8px; font-size: .8rem; }
   #topbar { gap: 8px; }
   .pill { font-size: 0; padding: 4px; }
   .pill .num { margin: 0; font-size: .75rem; }
