@@ -1,5 +1,6 @@
 import { LAYERS } from './content.js';
 import { GLOSSARY } from './glossary.js';
+import { SECRETS } from './secrets.js';
 import { sfx } from './sound.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -20,7 +21,7 @@ export function pointsFor(mistakes) {
 }
 
 export class UI {
-  constructor({ onStart, onRestart, onInteract, onRush }) {
+  constructor({ onStart, onRestart, onInteract, onRush, onTime }) {
     this.panel = $('#panel');
     this.panelTitle = $('#panel-title');
     this.panelLayer = $('#panel-layer');
@@ -34,6 +35,9 @@ export class UI {
     $('#end-rush-btn').addEventListener('click', () => onRush('end'));
     $('#glossary-btn').addEventListener('click', () => this.toggleGlossary());
     $('#glossary-close').addEventListener('click', () => this.toggleGlossary(false));
+    $('#chest-btn').addEventListener('click', () => this.toggleGlossary());
+    $('#time-btn').addEventListener('click', onTime);
+    $('#secret-close').addEventListener('click', () => { $('#secret').hidden = true; });
     const mute = $('#mute-btn');
     const paintMute = () => { mute.textContent = sfx.muted ? '🔇' : '🔊'; };
     mute.addEventListener('click', () => {
@@ -42,6 +46,7 @@ export class UI {
     });
     paintMute();
     this.collected = new Set();
+    this.secrets = new Set();
     this.buildLegend();
     this.renderGlossary();
   }
@@ -54,6 +59,10 @@ export class UI {
 
   renderGlossary(freshId = null) {
     $('#orb-count').textContent = `${this.collected.size}/${GLOSSARY.length}`;
+    $('#chest-count').textContent = `${this.secrets.size}/${SECRETS.length}`;
+    $('#secret-list').innerHTML = SECRETS.map((s) => (this.secrets.has(s.id)
+      ? `<div class="gcard secret"><b>${s.title}</b>${s.text}</div>`
+      : '<div class="gcard secret locked"><b>???</b>A chest hidden somewhere off the paved path.</div>')).join('');
     $('#glossary-progress').textContent = this.collected.size === GLOSSARY.length
       ? 'You found every knowledge orb. Nice exploring!'
       : `${this.collected.size} of ${GLOSSARY.length} found. Walk through the glowing ? orbs to unlock more.`;
@@ -64,6 +73,26 @@ export class UI {
       }
       return `<div class="gcard${g.id === freshId ? ' fresh' : ''}" style="--c:${l.color}"><b>${g.term}</b>${g.text}</div>`;
     }).join('');
+  }
+
+  collectSecret(entry) {
+    this.secrets.add(entry.id);
+    $('#secret-title').textContent = entry.title;
+    $('#secret-text').textContent = entry.text;
+    $('#secret-kicker').textContent = `🧰 Hidden chest ${this.secrets.size} of ${SECRETS.length}`;
+    const card = $('#secret');
+    card.hidden = false;
+    card.classList.remove('pop');
+    void card.offsetWidth;
+    card.classList.add('pop');
+    clearTimeout(this.secretTimer);
+    this.secretTimer = setTimeout(() => { card.hidden = true; }, 12000);
+    this.renderGlossary();
+  }
+
+  setTime(name) {
+    $('#time-btn').textContent = { Day: '☀️', Sunset: '🌇', Night: '🌙' }[name] ?? '☀️';
+    this.toast(`${name} falls over the block world`.replace('Day falls', 'Day breaks'));
   }
 
   toggleGlossary(open = $('#glossary').hidden) {
@@ -129,7 +158,7 @@ export class UI {
     const m = Math.floor(seconds / 60);
     const s = String(Math.floor(seconds % 60)).padStart(2, '0');
     const bestText = best > score ? ` · your best: ${best}` : best === score && best > 0 ? ' · new personal best!' : '';
-    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes · ${this.collected.size}/${GLOSSARY.length} orbs${bestText}`;
+    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes · ${this.collected.size}/${GLOSSARY.length} orbs · ${this.secrets.size}/${SECRETS.length} chests${bestText}`;
     const chip = (r) => `<span class="topic${r.mistakes ? ' retry' : ''}" style="--c:${LAYERS[r.layer].color}">${r.topic}</span>`;
     const retry = results.filter((r) => r.mistakes);
     $('#end-report').innerHTML = `

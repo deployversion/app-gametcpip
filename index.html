@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Packet Quest: a 3D serious game where you become a packet and travel down and up the TCP/IP stack." />
     <title>Packet Quest · TCP/IP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
   </head>
   <body>
@@ -16,6 +19,8 @@
         <div id="legend" aria-label="TCP/IP layers"></div>
         <div class="score">Score <b id="score">0</b></div>
         <button id="glossary-btn" class="hud-btn" title="Glossary (G)">📖 <b id="orb-count">0</b></button>
+        <button id="chest-btn" class="hud-btn" title="Hidden chests">🧰 <b id="chest-count">0</b></button>
+        <button id="time-btn" class="hud-btn" title="Time of day (T)">☀️</button>
         <button id="mute-btn" class="hud-btn" title="Sound on/off">🔊</button>
       </div>
       <div id="objective"><span class="label">Objective</span><span id="objective-text"></span></div>
@@ -24,7 +29,7 @@
         <div id="packet-card"></div>
       </div>
       <button id="prompt" hidden></button>
-      <div id="help">WASD / arrows or tap the ground to move · drag to look · scroll to zoom · E to interact · G glossary · collect the glowing <b>?</b> orbs</div>
+      <div id="help">WASD / arrows or tap the ground to move · drag to look · scroll to zoom · E to interact · G glossary · Space hop · T time of day · grab the <b>?</b> blocks and wander off the path for hidden 🧰 chests</div>
     </div>
 
     <section id="panel" hidden aria-live="polite">
@@ -36,6 +41,13 @@
     </section>
 
     <div id="toast" role="status"></div>
+
+    <aside id="secret" hidden aria-live="polite">
+      <div class="kicker" id="secret-kicker"></div>
+      <h3 id="secret-title"></h3>
+      <p id="secret-text"></p>
+      <button id="secret-close" class="secondary">Nice!</button>
+    </aside>
 
     <div id="intro" class="overlay">
       <div class="card">
@@ -49,6 +61,7 @@
           <span style="--c:#35d07f">2 · Internet</span>
           <span style="--c:#3d9bff">1 · Link</span>
         </div>
+        <p class="muted small">The stack is a block world now: grassy terraces on Alice's side, a sea of router islands in the middle and a red mesa on the server's side. Wander off the path to find 8 hidden chests.</p>
         <p class="controls">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or tap the ground · drag to look around · <kbd>E</kbd> to use a station</p>
         <div class="actions">
           <button id="start-btn" class="primary big">Start the mission</button>
@@ -64,6 +77,8 @@
         <h1>📖 Knowledge cards</h1>
         <p class="muted" id="glossary-progress"></p>
         <div id="glossary-list"></div>
+        <h3 class="secret-head">🧰 Hidden chests</h3>
+        <div id="secret-list"></div>
         <button id="glossary-close" class="primary">Back to the game</button>
       </div>
     </div>

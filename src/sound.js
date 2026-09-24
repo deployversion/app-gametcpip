@@ -51,6 +51,7 @@ class Sfx {
   wrong() { this.tone(160, { dur: 0.25, type: 'sawtooth', vol: 0.5, slide: 110 }); }
   click() { this.tone(880, { dur: 0.05, type: 'square', vol: 0.2 }); }
   collect() { [988, 1319, 1568, 2093].forEach((f, i) => this.tone(f, { at: i * 0.05, dur: 0.12, vol: 0.5 })); }
+  jump() { this.tone(300, { dur: 0.18, type: 'square', vol: 0.22, slide: 520 }); }
   whoosh() { this.tone(220, { dur: 0.5, type: 'triangle', vol: 0.4, slide: 880 }); }
   gate() { [392, 523, 659].forEach((f) => this.tone(f, { dur: 0.5, type: 'triangle', vol: 0.4 })); }
   drop() { this.tone(600, { dur: 0.7, type: 'sawtooth', vol: 0.5, slide: 60 }); }
