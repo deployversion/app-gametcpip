@@ -411,17 +411,18 @@ export function makeJellyfish(color, scale = 1) {
   inner.position.y = 0.25;
   g.add(bell, inner);
   const tentMat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
-  const tentacles = [];
+  // all eight tentacles share one mesh, which sways as a whole
+  const tubes = [];
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
     const r = i % 2 ? 0.75 : 0.35;
     const len = rand(2.2, 4);
     const pts = [];
-    for (let k = 0; k <= 6; k++) pts.push(new THREE.Vector3(Math.cos(a) * r + Math.sin(k) * 0.1, 0.05 - (k / 6) * len, Math.sin(a) * r + Math.cos(k * 1.3) * 0.1));
-    const t = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, i % 2 ? 0.025 : 0.06, 5), tentMat);
-    g.add(t);
-    tentacles.push(t);
+    for (let k = 0; k <= 6; k++) pts.push(new THREE.Vector3(Math.cos(a) * r + Math.sin(k + i) * 0.12, 0.05 - (k / 6) * len, Math.sin(a) * r + Math.cos(k * 1.3 + i) * 0.12));
+    tubes.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 16, i % 2 ? 0.025 : 0.06, 5));
   }
+  const tentacles = new THREE.Mesh(mergeGeometries(tubes), tentMat);
+  g.add(tentacles);
   g.scale.setScalar(scale);
   const phase = Math.random() * 6.28;
   const rate = rand(1.4, 2.2);
@@ -431,10 +432,9 @@ export function makeJellyfish(color, scale = 1) {
       const k = Math.sin(t * rate + phase);
       const squeeze = Math.max(0, k);
       bell.scale.set(1 + 0.1 * k, 1 - 0.18 * squeeze, 1 + 0.1 * k);
-      tentacles.forEach((tt, i) => {
-        tt.rotation.x = Math.sin(t * 1.2 + i + phase) * 0.12;
-        tt.rotation.z = Math.cos(t * 1.1 + i * 2 + phase) * 0.12;
-      });
+      tentacles.rotation.x = Math.sin(t * 1.2 + phase) * 0.1;
+      tentacles.rotation.z = Math.cos(t * 1.1 + phase) * 0.1;
+      tentacles.scale.y = 1 + squeeze * 0.08;
     },
     pulse: (t) => Math.max(0, Math.sin(t * rate + phase)),
   };
