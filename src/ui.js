@@ -20,7 +20,7 @@ export function pointsFor(mistakes) {
 }
 
 export class UI {
-  constructor({ onStart, onRestart, onInteract, onRush }) {
+  constructor({ onStart, onRestart, onInteract, onRush, onExplore, onQuality }) {
     this.panel = $('#panel');
     this.panelTitle = $('#panel-title');
     this.panelLayer = $('#panel-layer');
@@ -32,6 +32,9 @@ export class UI {
     this.prompt.addEventListener('click', onInteract);
     $('#rush-btn').addEventListener('click', () => onRush('intro'));
     $('#end-rush-btn').addEventListener('click', () => onRush('end'));
+    $('#explore-btn').addEventListener('click', () => onExplore('intro'));
+    $('#end-explore-btn').addEventListener('click', () => onExplore('end'));
+    $('#quality-btn').addEventListener('click', onQuality);
     $('#glossary-btn').addEventListener('click', () => this.toggleGlossary());
     $('#glossary-close').addEventListener('click', () => this.toggleGlossary(false));
     const mute = $('#mute-btn');
@@ -44,6 +47,12 @@ export class UI {
     this.collected = new Set();
     this.buildLegend();
     this.renderGlossary();
+  }
+
+  setQuality(high) {
+    const b = $('#quality-btn');
+    b.classList.toggle('off', !high);
+    b.title = high ? 'Glow effects: on (click to turn off)' : 'Glow effects: off (click to turn on)';
   }
 
   // ------------------------------------------------------------ glossary

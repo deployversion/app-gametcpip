@@ -35,6 +35,7 @@ button.secondary:hover { border-color: var(--accent); }
 .small { font-size: .85rem; }
 .hud-btn { pointer-events: auto; background: var(--glass); border: 1px solid var(--line); border-radius: 12px; padding: 7px 12px; backdrop-filter: blur(8px); }
 .hud-btn:hover { border-color: var(--accent); }
+.hud-btn.off { opacity: .45; filter: grayscale(1); }
 
 /* ---------------------------------------------------------------- HUD */
 #topbar {

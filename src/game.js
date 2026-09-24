@@ -9,6 +9,13 @@ import { tween, updateTweens, wait, ease } from './tween.js';
 import { makeLabel } from './labels.js';
 import { sfx } from './sound.js';
 import { RouterRush } from './rush.js';
+import { createComposer } from './effects.js';
+
+const QUALITY_KEY = 'packetquest.quality';
+const SPRINT = 1.8;
+const JUMP_SPEED = 9;
+const GRAVITY = 26;
+const FERRY_RADIUS = 1.8;
 
 const BEST_KEY = 'packetquest.bestScore';
 const ORB_RADIUS = 1.8;
@@ -22,7 +29,7 @@ const MAX_SCORE = STATIONS.flatMap((s) => s.steps).filter((s) => s.type !== 'inf
 export class Game {
   constructor(container) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -32,6 +39,9 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 800);
     this.world = buildWorld(this.scene);
+    this.post = createComposer(this.renderer, this.scene, this.camera);
+    this.highQuality = readQuality();
+    this.jump = { y: 0, v: 0 };
     this.packet = new PacketAvatar(this.scene);
 
     this.ui = new UI({
@@ -39,7 +49,10 @@ export class Game {
       onRestart: () => window.location.reload(),
       onInteract: () => this.tryInteract(),
       onRush: (from) => this.startRush(from),
+      onExplore: (from) => this.startExplore(from),
+      onQuality: () => this.toggleQuality(),
     });
+    this.ui.setQuality(this.highQuality);
     this.rush = new RouterRush({
       onExit: () => this.exitRush(),
       onCorrect: () => this.flashRandomRouter(),
@@ -112,7 +125,7 @@ export class Game {
 
   // --------------------------------------------------------------- game flow
   get station() {
-    return STATIONS[this.state.stationIndex];
+    return this.state.explore ? undefined : STATIONS[this.state.stationIndex];
   }
 
   start() {
@@ -325,6 +338,53 @@ export class Game {
     });
   }
 
+  // ------------------------------------------------------------ explore mode
+  startExplore(from) {
+    sfx.unlock();
+    document.querySelector(from === 'intro' ? '#intro' : '#end').hidden = true;
+    document.querySelector('#hud').hidden = false;
+    this.state.explore = true;
+    this.state.mode = 'walk';
+    this.cinematicCam = null;
+    for (const gate of this.world.gates.values()) {
+      gate.open = true;
+      gate.group.visible = false;
+    }
+    for (const f of this.world.ferries.values()) f.group.visible = true;
+    this.updateBeacons();
+    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on a ferry pad to fly across the network.');
+    if (from === 'end') this.placeAt(SPAWN.receiver);
+  }
+
+  async ferryAcross() {
+    const from = this.state.side;
+    this.state.mode = 'cinematic';
+    this.moveTarget = null;
+    this.packet.setBits(true);
+    sfx.whoosh();
+    const up = new THREE.Vector3(0, 1.5, 0);
+    const hops = ['GW', 'R1', 'R4', 'SW'].map((id) => nodePosition(id).add(up));
+    if (from === 'receiver') hops.reverse();
+    const edgeOut = NETWORK_EDGE[from].clone().setY(HOVER);
+    const to = from === 'sender' ? 'receiver' : 'sender';
+    const arrive = to === 'receiver' ? SPAWN.receiver.clone() : new THREE.Vector3(-14, 0, 0);
+    arrive.y = heightAt(arrive.x) + HOVER;
+    await this.travel([edgeOut, ...hops, NETWORK_EDGE[to].clone().setY(HOVER), arrive], 22);
+    this.packet.setBits(false);
+    this.state.side = to;
+    this.state.mode = 'walk';
+  }
+
+  toggleQuality() {
+    this.highQuality = !this.highQuality;
+    try {
+      localStorage.setItem(QUALITY_KEY, this.highQuality ? 'high' : 'low');
+    } catch {
+      // storage unavailable: the choice just won't persist
+    }
+    this.ui.setQuality(this.highQuality);
+  }
+
   // ------------------------------------------------------------ router rush
   startRush(from) {
     this.rushReturn = { from, mode: this.state.mode, cam: this.cinematicCam };
@@ -420,6 +480,11 @@ export class Game {
       if (k === 'escape') this.ui.toggleGlossary(false);
       if (this.ui.glossaryOpen) return;
       if (k === 'e' || k === 'enter') this.tryInteract();
+      if (k === ' ' && this.state.mode === 'walk') {
+        if (this.jump.y === 0) this.jump.v = JUMP_SPEED;
+        e.preventDefault();
+      }
+      if (k === 'shift') this.keys.add('shift');
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
         this.keys.add(k);
         this.moveTarget = null;
@@ -501,7 +566,8 @@ export class Game {
         input.set(0, 0, 0);
       }
     }
-    if (input.lengthSq() > 0) input.normalize().multiplyScalar(WALK_SPEED * dt);
+    const speed = WALK_SPEED * (k.has('shift') ? SPRINT : 1);
+    if (input.lengthSq() > 0) input.normalize().multiplyScalar(speed * dt);
     this.moveDir = input.clone();
 
     const [minX, maxX] = this.walkBounds();
@@ -511,17 +577,33 @@ export class Game {
     p.x = nx;
     p.z = nz;
 
-    // keep out of the pedestals
-    for (const s of this.world.stations.values()) {
-      const dx = p.x - s.position.x;
-      const dz = p.z - s.position.z;
+    // keep out of the pedestals and scenery
+    const pushOut = (cx, cz, r) => {
+      const dx = p.x - cx;
+      const dz = p.z - cz;
       const d = Math.hypot(dx, dz);
-      if (d < PEDESTAL_RADIUS && d > 0.0001) {
-        p.x = s.position.x + (dx / d) * PEDESTAL_RADIUS;
-        p.z = s.position.z + (dz / d) * PEDESTAL_RADIUS;
+      if (d < r && d > 0.0001) {
+        p.x = cx + (dx / d) * r;
+        p.z = cz + (dz / d) * r;
+      }
+    };
+    for (const s of this.world.stations.values()) pushOut(s.position.x, s.position.z, PEDESTAL_RADIUS);
+    if (this.jump.y < 1.5) for (const c of this.world.colliders) pushOut(c.x, c.z, c.r + 0.5);
+    p.x = THREE.MathUtils.clamp(p.x, minX, maxX);
+
+    this.jump.v -= GRAVITY * dt;
+    this.jump.y = Math.max(0, this.jump.y + this.jump.v * dt);
+    if (this.jump.y === 0) this.jump.v = 0;
+    const ground = heightAt(p.x) + HOVER;
+    p.y = this.jump.y > 0 ? ground + this.jump.y : THREE.MathUtils.lerp(p.y, ground, Math.min(1, dt * 12));
+
+    if (this.state.explore) {
+      const ferry = this.world.ferries.get(this.state.side);
+      if (Math.hypot(p.x - ferry.position.x, p.z - ferry.position.z) < FERRY_RADIUS) {
+        this.ferryAcross();
+        return;
       }
     }
-    p.y = THREE.MathUtils.lerp(p.y, heightAt(p.x) + HOVER, Math.min(1, dt * 12));
 
     for (const orb of this.world.orbs.values()) {
       if (!orb.collected && Math.hypot(p.x - orb.group.position.x, p.z - orb.group.position.z) < ORB_RADIUS) this.collectOrb(orb);
@@ -584,6 +666,7 @@ export class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.post.setSize(window.innerWidth, window.innerHeight);
   }
 
   tick() {
@@ -602,7 +685,19 @@ export class Game {
       this.cinematicCam.pos.set(21 + Math.cos(a) * 55, 32, Math.sin(a) * 55);
     }
     this.updateCamera(dt);
-    this.renderer.render(this.scene, this.camera);
+    if (this.highQuality) this.post.composer.render(dt);
+    else this.renderer.render(this.scene, this.camera);
   }
 }
 
+
+function readQuality() {
+  try {
+    const saved = localStorage.getItem(QUALITY_KEY);
+    if (saved) return saved === 'high';
+  } catch {
+    // fall through to the default
+  }
+  // Glow costs GPU time: default it off on small screens.
+  return window.innerWidth > 760;
+}
