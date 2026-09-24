@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { STATIONS, ROUTES, LAYERS } from './content.js';
 import {
-  buildWorld, heightAt, nodePosition, PATH_HALF_WIDTH, SIDE_BOUNDS, SPAWN, NETWORK_EDGE, GATE_X,
+  buildWorld, heightAt, PATH_HALF_WIDTH, SIDE_BOUNDS, SPAWN, NETWORK_EDGE, GATE_X, RX,
 } from './world.js';
+import { NET_MID } from './layout.js';
 import { PacketAvatar } from './packet.js';
 import { UI } from './ui.js';
 import { tween, updateTweens, wait, ease } from './tween.js';
@@ -43,6 +44,7 @@ export class Game {
     this.highQuality = readQuality();
     this.jump = { y: 0, v: 0 };
     this.packet = new PacketAvatar(this.scene);
+    this.world.setFocus(this.packet.position);
 
     this.ui = new UI({
       onStart: () => this.start(),
@@ -229,11 +231,25 @@ export class Game {
       this.moveDir = dir;
     }, ease.inOut);
     this.moveDir = null;
-    if (cable) cable.material.color.set('#4be1ff');
+    if (cable) cable.material.color.set(cable.userData.color ?? '#4be1ff');
   }
 
   cableBetween(a, b) {
     return this.world.cables.get(`${a}-${b}`) ?? this.world.cables.get(`${b}-${a}`);
+  }
+
+  // The waypoints of a physical link (along the street, the sea floor, up to
+  // the satellite…), lifted so the packet rides just above the cable.
+  hopPath(a, b, upTo = 1) {
+    const pts = this.world.linkPath(a, b).map((v) => v.add(new THREE.Vector3(0, 1.5, 0)));
+    return pts.slice(0, Math.max(2, Math.round(pts.length * upTo)));
+  }
+
+  // Fly one link. Speed scales with its length so the ocean crossing takes a
+  // few seconds, not half a minute.
+  async flyLink(a, b, speed = 16, upTo = 1) {
+    const pts = this.hopPath(a, b, upTo);
+    await this.travel(pts, speed, this.cableBetween(a, b));
   }
 
   async flyFromSender() {
@@ -243,7 +259,8 @@ export class Game {
     sfx.whoosh();
     const edge = NETWORK_EDGE.sender.clone().setY(HOVER);
     await this.travel([edge], 12);
-    await this.travel([nodePosition('GW').add(new THREE.Vector3(0, 1.5, 0))], 16, this.world.cables.get('LAN-GW'));
+    this.ui.toast('Leaving the laptop as Wi-Fi radio waves…');
+    await this.flyLink('LAN', 'GW', 14);
     this.packet.setBits(false);
     this.openStation();
   }
@@ -262,12 +279,13 @@ export class Game {
     await wait(0.5);
     this.packet.setBits(true);
     sfx.whoosh();
-    const up = new THREE.Vector3(0, 1.5, 0);
     const cable = this.cableBetween(from, next);
+    const tour = this.world.landmarks[`${from}-${next}`];
+    if (tour) this.ui.toast(tour);
     if (this.station?.id === 'net-loss') {
-      // The link is congested: the packet gets dropped halfway.
-      const mid = nodePosition(from).add(up).lerp(nodePosition(next).add(up), 0.55);
-      await this.travel([mid], 16, cable);
+      // The link is congested: the packet crosses the ocean, then R4's
+      // queue is full when it arrives and it gets dropped at the far shore.
+      await this.flyLink(from, next, 30, 0.9);
       this.packet.setBits(false);
       cable.material.color.set('#ff5d73');
       this.ui.toast('Queue full at R4: packet dropped!');
@@ -275,10 +293,11 @@ export class Game {
       this.openStation();
       return;
     }
-    await this.travel([nodePosition(next).add(up)], 16, cable);
+    await this.flyLink(from, next, from === 'R1' ? 30 : 16);
     if (next === 'SW') {
       const spawn = SPAWN.receiver.clone().setY(heightAt(SPAWN.receiver.x) + HOVER);
-      await this.travel([NETWORK_EDGE.receiver.clone().setY(HOVER), spawn], 12, this.world.cables.get('SW-LAN'));
+      this.ui.toast(this.world.landmarks['SW-LAN']);
+      await this.travel([...this.hopPath('SW', 'LAN'), NETWORK_EDGE.receiver.clone().setY(HOVER), spawn], 12, this.world.cables.get('SW-LAN'));
       this.packet.setBits(false);
       this.state.side = 'receiver';
       this.state.mode = 'walk';
@@ -292,16 +311,16 @@ export class Game {
   async flyRetransmit() {
     this.state.mode = 'cinematic';
     this.ui.setObjective('Retransmitting…');
-    const up = new THREE.Vector3(0, 1.5, 0);
-    this.packet.position.copy(nodePosition('GW').add(up));
+    this.packet.position.copy(this.hopPath('GW', 'R1')[0]);
     this.packet.body.visible = true;
     this.packet.tag.visible = true;
     this.packet.body.scale.setScalar(0.01);
     await tween(0.4, (k) => this.packet.body.scale.setScalar(Math.max(0.01, k)), ease.back);
     this.packet.setBits(true);
     sfx.whoosh();
-    await this.travel([nodePosition('R1').add(up)], 26, this.cableBetween('GW', 'R1'));
-    await this.travel([nodePosition('R4').add(up)], 18, this.cableBetween('R1', 'R4'));
+    await this.flyLink('GW', 'R1', 26);
+    this.ui.toast('The copy crosses the ocean again…');
+    await this.flyLink('R1', 'R4', 38);
     this.packet.setBits(false);
     this.openStation();
   }
@@ -318,7 +337,7 @@ export class Game {
     } catch {
       best = this.state.score;
     }
-    this.cinematicCam = { pos: new THREE.Vector3(10, 70, 110), look: new THREE.Vector3(10, 0, 0) };
+    this.cinematicCam = { pos: new THREE.Vector3(NET_MID, 95, 160), look: new THREE.Vector3(NET_MID, 0, 0) };
 
     const reply = new THREE.Group();
     const ball = new THREE.Mesh(new THREE.SphereGeometry(1.2, 24, 16), new THREE.MeshStandardMaterial({ color: '#ff6fb5', emissive: '#ff6fb5', emissiveIntensity: 0.9 }));
@@ -327,12 +346,13 @@ export class Game {
     reply.add(ball, tag, new THREE.PointLight('#ff6fb5', 30, 20, 1.5));
     this.scene.add(reply);
 
-    const xs = [140, 132, 117, 104, 91, 78, 65, 52];
+    const xs = [140, 132, 117, 104, 91, 78, 65, 52].map((x) => x + RX);
     const route = xs.map((x) => new THREE.Vector3(x, heightAt(x) + 2, 0));
-    for (const id of ['SW', 'R4', 'R1', 'GW']) route.push(nodePosition(id).add(new THREE.Vector3(0, 2, 0)));
+    const hops = [['LAN', 'SW'], ['SW', 'R4'], ['R4', 'R1'], ['R1', 'GW'], ['GW', 'LAN']];
+    for (const [a, b] of hops) route.push(...this.hopPath(a, b).filter((_, i) => i % 4 === 0));
     for (const x of [-10, -23, -38, -53, -68, -83, -100, -118]) route.push(new THREE.Vector3(x, heightAt(x) + 2, 0));
     const curve = new THREE.CatmullRomCurve3(route);
-    await tween(7, (k) => reply.position.copy(curve.getPointAt(k)), ease.inOut);
+    await tween(10, (k) => reply.position.copy(curve.getPointAt(k)), ease.inOut);
     this.ui.showEnd({
       score: this.state.score, max: MAX_SCORE, mistakes: this.state.mistakes, seconds, results: this.state.results, best,
     });
@@ -362,14 +382,21 @@ export class Game {
     this.moveTarget = null;
     this.packet.setBits(true);
     sfx.whoosh();
-    const up = new THREE.Vector3(0, 1.5, 0);
-    const hops = ['GW', 'R1', 'R4', 'SW'].map((id) => nodePosition(id).add(up));
-    if (from === 'receiver') hops.reverse();
+    // A guided tour of the physical route, one link at a time.
+    let stops = ['LAN', 'GW', 'R1', 'R4', 'SW', 'LAN'];
+    if (from === 'receiver') stops = stops.reverse();
     const edgeOut = NETWORK_EDGE[from].clone().setY(HOVER);
     const to = from === 'sender' ? 'receiver' : 'sender';
     const arrive = to === 'receiver' ? SPAWN.receiver.clone() : new THREE.Vector3(-14, 0, 0);
     arrive.y = heightAt(arrive.x) + HOVER;
-    await this.travel([edgeOut, ...hops, NETWORK_EDGE[to].clone().setY(HOVER), arrive], 22);
+    await this.travel([edgeOut], 22);
+    for (let i = 1; i < stops.length; i++) {
+      const [a, b] = [stops[i - 1], stops[i]];
+      const tour = this.world.landmarks[`${a}-${b}`] ?? this.world.landmarks[`${b}-${a}`];
+      if (tour) this.ui.toast(tour);
+      await this.flyLink(a, b, 20);
+    }
+    await this.travel([NETWORK_EDGE[to].clone().setY(HOVER), arrive], 22);
     this.packet.setBits(false);
     this.state.side = to;
     this.state.mode = 'walk';
@@ -390,7 +417,7 @@ export class Game {
     this.rushReturn = { from, mode: this.state.mode, cam: this.cinematicCam };
     document.querySelector(from === 'intro' ? '#intro' : '#end').hidden = true;
     this.state.mode = 'rush';
-    this.cinematicCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(21, 0, 0) };
+    this.cinematicCam = { pos: new THREE.Vector3(), look: new THREE.Vector3(NET_MID, 0, 0) };
     this.rush.start();
   }
 
@@ -630,7 +657,7 @@ export class Game {
   }
 
   layerAt(x) {
-    if (this.state.mode === 'cinematic' || (x > 0 && x < 44)) return 'internet';
+    if (this.state.mode === 'cinematic' || (x > 0 && x < 44 + RX)) return 'internet';
     const cuts = this.state.side === 'sender'
       ? [[-83, 'app'], [-53, 'transport'], [-23, 'internet'], [Infinity, 'link']]
       : [[65, 'link'], [91, 'internet'], [117, 'transport'], [Infinity, 'app']];
@@ -639,8 +666,11 @@ export class Game {
 
   // --------------------------------------------------------------- camera
   cameraGoal() {
-    const { yaw, pitch } = this.cam;
-    const dist = this.state.mode === 'cinematic' ? Math.max(this.cam.dist, 24) : this.cam.dist;
+    const { yaw } = this.cam;
+    const flying = this.state.mode === 'cinematic';
+    // While flying, look down from higher up so the sea floor stays in view.
+    const pitch = flying ? Math.max(this.cam.pitch, 0.62) : this.cam.pitch;
+    const dist = flying ? Math.max(this.cam.dist, 24) : this.cam.dist;
     const target = this.packet.position.clone().add(new THREE.Vector3(0, 1.2, 0));
     if (this.state.mode === 'panel') target.z -= 2;
     const offset = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(dist);
@@ -682,7 +712,7 @@ export class Game {
     this.world.sun.target.position.copy(p);
     if (this.state.mode === 'rush') {
       const a = this.time * 0.12;
-      this.cinematicCam.pos.set(21 + Math.cos(a) * 55, 32, Math.sin(a) * 55);
+      this.cinematicCam.pos.set(NET_MID + Math.cos(a) * 80, 42, Math.sin(a) * 80);
     }
     this.updateCamera(dt);
     if (this.highQuality) this.post.composer.render(dt);

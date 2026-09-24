@@ -20,9 +20,19 @@ Every layer plateau has its own scenery: a neon **app city** with floating app w
 
 ### Extras
 
-- **Explore freely.** From the start or end screen: every gate opens, and ferry pads fly you across the network between Alice's side and the server's side. Sprint with `Shift`, jump with `Space`.
+- **Explore freely.** From the start or end screen: every gate opens, and tour pads fly you along the physical route between Alice's laptop and the data centre, with a caption for each stretch. Sprint with `Shift`, jump with `Space`.
 
-- **Knowledge orbs.** 14 glowing `?` orbs are hidden on the plateaus. Walk through one to unlock a glossary card (DNS, TLS, UDP, flow control, IPv6, ICMP, switches, Wi-Fi, MTU, private addresses, traceroute, sockets, QUIC, HTTP status codes). Open the glossary with `G` or the 📖 button.
+### The world: the physical internet
+
+Every place in the world is where that part of the journey really happens.
+
+- **Alice's laptop** (sender terraces): the keyboard in front of the browser screen (Application), the motherboard with the CPU and RAM where the OS kernel runs TCP (Transport), the network stack with its routing table (Internet) and the Wi-Fi card with its antennas (Link). Alice's cat watches you over the screen.
+- **The network**: radio waves to the home router in Alice's house, an overhead line past the street cabinet to the ISP exchange (R1), then down a beach at a cable landing station and along the sea floor on an undersea fibre cable with glowing repeaters to the far shore (R4). The wrong-turn routers are real kinds of places too: a mobile mast with a microwave link (R5), an internet exchange point (R2), a satellite ground station talking to a geostationary satellite (R3) and another provider (R6).
+- **The data centre** (receiver terraces): the meet-me room where the fibre enters (Link), the core routers and firewall (Internet), server rows with cooling units (Transport) and the catpics web server with its access log (Application).
+
+The packet drop now happens at the far shore: the copy crosses the whole ocean before R4's full queue throws it away.
+
+- **Knowledge orbs.** 18 glowing `?` orbs are hidden on the plateaus. Walk through one to unlock a glossary card (DNS, TLS, UDP, flow control, IPv6, ICMP, switches, Wi-Fi, MTU, private addresses, traceroute, sockets, QUIC, HTTP status codes, latency, optical fibre, undersea cables, data centres). Open the glossary with `G` or the 📖 button.
 - **Learning report.** The end screen lists every topic you practised, marks the ones that took more than one try as "worth another look", and remembers your best score.
 - **Router Rush.** A 60-second bonus game from the start or end screen: random routing tables, one destination, pick the winning row. Streaks multiply your points, wrong answers cost 5 seconds and the tables get harder every 5 correct answers.
 - **Sound.** Synthesized with the Web Audio API (no audio files). Toggle with the 🔊 button.
@@ -57,9 +67,11 @@ npm run build    # static build in dist/
 | `src/glossary.js` | Knowledge orb cards and where they are hidden. |
 | `src/rush.js` | The Router Rush bonus game UI. |
 | `src/sound.js` | Synthesized sound effects. |
-| `src/world.js` | The 3D world: layer plateaus, stations, gates, routers, cables, network traffic and ferry pads. |
-| `src/environment.js` | Themed scenery per layer, wandering NPC packets and prop colliders. |
-| `src/effects.js` | Bloom post-processing, the sky dome and the data ocean shaders. |
+| `src/world.js` | The 3D world: layer plateaus, stations, gates, orbs and tour pads. |
+| `src/geography.js` | The physical network: terrain, sea, routers, every link's route (street, sea floor, satellite), landmarks and traffic. |
+| `src/environment.js` | Scenery per layer (laptop hardware, data centre), wandering NPC packets and prop colliders. |
+| `src/effects.js` | Bloom post-processing, the night sky and the sea shaders. |
+| `src/layout.js` | Shared layout numbers (how far east the receiver's side sits). |
 | `src/packet.js` | The player avatar: the data core plus one shell per header. |
 | `src/game.js` | Game loop, movement, camera, station flow and network flight. |
 | `src/ui.js` | HUD, packet anatomy card and the station panel that runs the steps. |
