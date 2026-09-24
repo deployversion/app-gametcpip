@@ -13,8 +13,9 @@ import { createComposer } from './effects.js';
 
 const QUALITY_KEY = 'packetquest.quality';
 const SPRINT = 1.8;
-const JUMP_SPEED = 9;
-const GRAVITY = 26;
+// Low gravity: magnetic boots keep you on the deck, but jumps float.
+const JUMP_SPEED = 8.5;
+const GRAVITY = 12;
 const FERRY_RADIUS = 1.8;
 
 const BEST_KEY = 'packetquest.bestScore';
@@ -37,7 +38,7 @@ export class Game {
     container.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 800);
+    this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1600);
     this.world = buildWorld(this.scene);
     this.post = createComposer(this.renderer, this.scene, this.camera);
     this.highQuality = readQuality();
@@ -352,7 +353,7 @@ export class Game {
     }
     for (const f of this.world.ferries.values()) f.group.visible = true;
     this.updateBeacons();
-    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on a ferry pad to fly across the network.');
+    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on a shuttle pad to fly across the network.');
     if (from === 'end') this.placeAt(SPAWN.receiver);
   }
 
@@ -369,10 +370,24 @@ export class Game {
     const to = from === 'sender' ? 'receiver' : 'sender';
     const arrive = to === 'receiver' ? SPAWN.receiver.clone() : new THREE.Vector3(-14, 0, 0);
     arrive.y = heightAt(arrive.x) + HOVER;
+    this.world.shuttle.visible = true;
     await this.travel([edgeOut, ...hops, NETWORK_EDGE[to].clone().setY(HOVER), arrive], 22);
+    this.world.shuttle.visible = false;
     this.packet.setBits(false);
     this.state.side = to;
     this.state.mode = 'walk';
+  }
+
+  // Keep the shuttle under the packet, nose along the direction of travel.
+  rideShuttle(dt) {
+    const s = this.world.shuttle;
+    s.position.copy(this.packet.position).add(new THREE.Vector3(0, -1.1, 0));
+    if (this.moveDir && this.moveDir.lengthSq() > 1e-6) {
+      const goal = Math.atan2(-this.moveDir.z, this.moveDir.x);
+      let d = goal - s.rotation.y;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      s.rotation.y += d * Math.min(1, dt * 6);
+    }
   }
 
   toggleQuality() {
@@ -678,6 +693,7 @@ export class Game {
     this.packet.update(dt, this.time, this.moveDir);
     this.world.update(this.time, dt);
     const p = this.packet.position;
+    if (this.world.shuttle.visible) this.rideShuttle(dt);
     this.world.sun.position.set(p.x + 25, p.y + 45, p.z + 20);
     this.world.sun.target.position.copy(p);
     if (this.state.mode === 'rush') {

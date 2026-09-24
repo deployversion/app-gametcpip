@@ -14,13 +14,20 @@ Alice wants a cat picture from `catpics.example`. You are her HTTPS request:
 
 The **Packet anatomy** panel shows your current headers and their fields at all times. Correct first answers are worth 100 points, with fewer points for later tries and an explanation for every wrong answer.
 
-### The world
+### The world: two space stations
 
-Every layer plateau has its own scenery: a neon **app city** with floating app windows and a DNS kiosk, a **container harbor** with a gantry crane, port-numbered containers and a conveyor of TCP segments, an **IP plaza** with a holographic globe, routing signposts and mailboxes, and a **server room** with blinking racks, a light-pulse cable tray, a Wi-Fi mast and a switch. Other people's packets wander the plateaus and zip along every network cable, all above an animated data ocean under an aurora sky, with bloom glow (toggle with ✨).
+Alice lives on **Terra-1**, a station orbiting a blue planet with city lights on its night side. `catpics.example` runs on **Kepler Station**, beside a ringed gas giant. Each station's four layer decks are rooms of the ship:
+
+- **Deck 4 · the Bridge** (application): a panoramic window, crew consoles with live telemetry, holographic app windows on projector beams and a comms dish that is the DNS resolver.
+- **Deck 3 · the Cargo Bay** (transport): cargo pods sorted by port, a robot arm, a docked segment shuttle, SYN/ACK/FIN/RST pennants and a maglev belt of TCP segments.
+- **Deck 2 · the Nav Deck** (internet): a holographic star chart where every planet is a network labelled with its prefix and a packet hops between them, nav beacons with routing arrows and pneumatic mail tubes.
+- **Deck 1 · Engineering** (link): a plasma reactor, blinking server racks, a power conduit, a Wi-Fi mast, a switch and the airlock to open space.
+
+Between the stations is the network: relay satellites (the routers) joined by laser links, drifting through an asteroid belt. Around it all are a procedural nebula sky with twinkling stars, a sun, a moon, a rotating habitat ring, solar arrays, thrusters, ships on far-off traffic lanes, distant stations and the odd shooting star. Maintenance drones and other packets float around the decks. Gravity is low, so jumps float. Bloom glow can be toggled with ✨.
 
 ### Extras
 
-- **Explore freely.** From the start or end screen: every gate opens, and ferry pads fly you across the network between Alice's side and the server's side. Sprint with `Shift`, jump with `Space`.
+- **Explore freely.** From the start or end screen: every airlock opens, and a shuttle pad on each station flies you across the network to the other one. Sprint with `Shift`, jump with `Space`.
 
 - **Knowledge orbs.** 14 glowing `?` orbs are hidden on the plateaus. Walk through one to unlock a glossary card (DNS, TLS, UDP, flow control, IPv6, ICMP, switches, Wi-Fi, MTU, private addresses, traceroute, sockets, QUIC, HTTP status codes). Open the glossary with `G` or the 📖 button.
 - **Learning report.** The end screen lists every topic you practised, marks the ones that took more than one try as "worth another look", and remembers your best score.
@@ -57,9 +64,10 @@ npm run build    # static build in dist/
 | `src/glossary.js` | Knowledge orb cards and where they are hidden. |
 | `src/rush.js` | The Router Rush bonus game UI. |
 | `src/sound.js` | Synthesized sound effects. |
-| `src/world.js` | The 3D world: layer plateaus, stations, gates, routers, cables, network traffic and ferry pads. |
-| `src/environment.js` | Themed scenery per layer, wandering NPC packets and prop colliders. |
-| `src/effects.js` | Bloom post-processing, the sky dome and the data ocean shaders. |
+| `src/world.js` | The 3D world: station hulls and decks, stations, airlock gates, relay satellites, laser links, network traffic and shuttle pads. |
+| `src/environment.js` | The rooms on every layer deck, drones and packets, the shuttle model and prop colliders. |
+| `src/space.js` | Nebula sky, sun, planets (shader surfaces, atmospheres, rings), asteroids, ship traffic, shooting stars, distant stations. |
+| `src/effects.js` | Bloom post-processing. |
 | `src/packet.js` | The player avatar: the data core plus one shell per header. |
 | `src/game.js` | Game loop, movement, camera, station flow and network flight. |
 | `src/ui.js` | HUD, packet anatomy card and the station panel that runs the steps. |
