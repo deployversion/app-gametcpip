@@ -10,6 +10,7 @@ import { makeLabel } from './labels.js';
 import { sfx } from './sound.js';
 import { RouterRush } from './rush.js';
 import { createComposer } from './effects.js';
+import { Minimap } from './minimap.js';
 
 const QUALITY_KEY = 'packetquest.quality';
 const SPRINT = 1.8;
@@ -53,6 +54,8 @@ export class Game {
       onQuality: () => this.toggleQuality(),
     });
     this.ui.setQuality(this.highQuality);
+    this.minimap = new Minimap(document.getElementById('minimap'));
+    this.showMap = true;
     this.rush = new RouterRush({
       onExit: () => this.exitRush(),
       onCorrect: () => this.flashRandomRouter(),
@@ -383,6 +386,8 @@ export class Game {
       // storage unavailable: the choice just won't persist
     }
     this.ui.setQuality(this.highQuality);
+    this.minimap = new Minimap(document.getElementById('minimap'));
+    this.showMap = true;
   }
 
   // ------------------------------------------------------------ router rush
@@ -478,6 +483,10 @@ export class Game {
       const k = e.key.toLowerCase();
       if (k === 'g' && ['walk', 'panel', 'cinematic'].includes(this.state.mode)) this.ui.toggleGlossary();
       if (k === 'escape') this.ui.toggleGlossary(false);
+      if (k === 'm') {
+        this.showMap = !this.showMap;
+        document.getElementById('minimap').hidden = !this.showMap;
+      }
       if (this.ui.glossaryOpen) return;
       if (k === 'e' || k === 'enter') this.tryInteract();
       if (k === ' ' && this.state.mode === 'walk') {
@@ -662,6 +671,20 @@ export class Game {
     this.camera.lookAt(this.cam.target);
   }
 
+  drawMinimap() {
+    const st = this.station;
+    this.minimap.draw({
+      player: this.packet.position,
+      heading: this.packet.heading,
+      stations: [...this.world.stations.values()],
+      current: st?.id,
+      routers: st?.router,
+      orbs: [...this.world.orbs.values()],
+      ferries: [...this.world.ferries.values()],
+      time: this.time,
+    });
+  }
+
   onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
@@ -685,6 +708,7 @@ export class Game {
       this.cinematicCam.pos.set(21 + Math.cos(a) * 55, 32, Math.sin(a) * 55);
     }
     this.updateCamera(dt);
+    if (this.showMap && this.state.mode !== 'intro') this.drawMinimap();
     if (this.highQuality) this.post.composer.render(dt);
     else this.renderer.render(this.scene, this.camera);
   }

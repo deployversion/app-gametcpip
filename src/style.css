@@ -75,6 +75,8 @@ button.secondary:hover { border-color: var(--accent); }
   box-shadow: 0 0 24px rgba(75, 225, 255, .35); animation: pulse 1.4s ease-in-out infinite;
 }
 @keyframes pulse { 50% { box-shadow: 0 0 6px rgba(75, 225, 255, .2); } }
+#minimap { position: fixed; right: 12px; top: 66px; width: 300px; height: 76px; border: 1px solid var(--line); border-radius: 10px; pointer-events: none; }
+body.panel-open #minimap { display: none; }
 #help { position: fixed; right: 12px; bottom: 12px; padding: 8px 12px; font-size: .8rem; color: var(--muted); max-width: 320px; }
 
 #toast {
@@ -180,4 +182,5 @@ button:disabled { cursor: default; }
   .hdr-fields { display: none; }
   #panel { top: auto; height: 62vh; bottom: 0; right: 0; left: 0; width: 100%; border-radius: 14px 14px 0 0; }
   #prompt { bottom: 130px; }
+  #minimap { width: 200px; height: 52px; top: 100px; }
 }

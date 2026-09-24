@@ -185,11 +185,13 @@ export class UI {
     if (station.side === 'network') this.panelLayer.textContent = station.router ? 'Router · Internet layer' : `Network · ${layer.name} layer`;
     else this.panelLayer.textContent = `Layer ${layer.num} · ${layer.name} · ${station.side}`;
     this.panel.hidden = false;
+    document.body.classList.add('panel-open');
     return new Promise((resolve) => {
       let i = 0;
       const next = () => {
         if (i >= station.steps.length) {
           this.panel.hidden = true;
+          document.body.classList.remove('panel-open');
           resolve();
           return;
         }

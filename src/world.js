@@ -17,7 +17,7 @@ const PROFILE = {
   receiver: [[44, 0], [60, 0], [70, 5], [86, 5], [96, 10], [112, 10], [122, 15], [146, 15]],
 };
 
-const PLATEAUS = [
+export const PLATEAUS = [
   { side: 'sender', layer: 'app', x0: -124, x1: -88, h: 15 },
   { side: 'sender', layer: 'transport', x0: -78, x1: -58, h: 10 },
   { side: 'sender', layer: 'internet', x0: -48, x1: -28, h: 5 },
@@ -67,7 +67,7 @@ export const NODES = {
 const NODE_LABELS = {
   GW: 'Home router', R1: 'R1 · ISP', R2: 'R2', R3: 'R3', R4: 'R4 · backbone', R5: 'R5', R6: 'R6', SW: 'Server LAN',
 };
-const LINKS = [['GW', 'R1'], ['R1', 'R2'], ['R1', 'R3'], ['R1', 'R4'], ['R1', 'R5'], ['R2', 'R4'], ['R3', 'R4'], ['R4', 'R6'], ['R4', 'SW'], ['R5', 'R2'], ['R6', 'SW']];
+export const LINKS = [['GW', 'R1'], ['R1', 'R2'], ['R1', 'R3'], ['R1', 'R4'], ['R1', 'R5'], ['R2', 'R4'], ['R3', 'R4'], ['R4', 'R6'], ['R4', 'SW'], ['R5', 'R2'], ['R6', 'SW']];
 const NODE_Y = 1.2;
 
 export function heightAt(x) {
@@ -309,7 +309,7 @@ export function buildWorld(scene) {
   const env = buildEnvironment(scene, PLATEAUS, animated);
   const colliders = [
     ...env.colliders,
-    { x: -120, z: -9, r: 5 }, // laptop
+    { x: -119, z: -13, r: 4 }, // laptop
     { x: 142, z: -9, r: 3.2 }, // server rack
   ];
 
@@ -510,8 +510,9 @@ function makeBitDust(animated) {
 function makeLaptop() {
   const g = new THREE.Group();
   // At the start of the path, screen turned towards the player.
-  g.position.set(-120, 15, -9);
-  g.rotation.y = 0.7;
+  g.position.set(-119, 15, -13);
+  g.rotation.y = 0.5;
+  g.scale.setScalar(0.75);
   const mat = new THREE.MeshStandardMaterial({ color: '#c9cfe6', metalness: 0.7, roughness: 0.3 });
   const base = new THREE.Mesh(new THREE.BoxGeometry(12, 0.5, 8), mat);
   base.position.y = 0.25;
