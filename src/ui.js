@@ -49,10 +49,11 @@ export class UI {
     this.renderGlossary();
   }
 
-  setQuality(high) {
+  setQuality(high, name = '', auto = false) {
     const b = $('#quality-btn');
     b.classList.toggle('off', !high);
-    b.title = high ? 'Glow effects: on (click to turn off)' : 'Glow effects: off (click to turn on)';
+    const mode = `Graphics: ${name}${auto ? ' (auto)' : ''}`;
+    b.title = `${mode}. Glow ${high ? 'on (click to turn off)' : 'off (click to turn on)'}`;
   }
 
   // ------------------------------------------------------------ glossary

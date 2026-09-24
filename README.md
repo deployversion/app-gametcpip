@@ -16,7 +16,7 @@ The **Packet anatomy** panel shows your current headers and their fields at all 
 
 ### The world
 
-Every layer plateau has its own scenery: a neon **app city** with floating app windows and a DNS kiosk, a **container harbor** with a gantry crane, port-numbered containers and a conveyor of TCP segments, an **IP plaza** with a holographic globe, routing signposts and mailboxes, and a **server room** with blinking racks, a light-pulse cable tray, a Wi-Fi mast and a switch. Other people's packets wander the plateaus and zip along every network cable, all above an animated data ocean under an aurora sky, with bloom glow (toggle with ✨).
+Every layer plateau has its own scenery: a neon **app city** with floating app windows and a DNS kiosk, a **container harbor** with a gantry crane, port-numbered containers and a conveyor of TCP segments, an **IP plaza** with a holographic globe, routing signposts and mailboxes, and a **server room** with blinking racks, a light-pulse cable tray, a Wi-Fi mast and a switch. Other people's packets wander the plateaus and zip along every network cable, all above an animated data ocean under an aurora sky, with bloom glow (toggle with ✨). Graphics detail tunes itself: if the frame rate drops, the game lowers resolution, then glow, then shadows, until it runs smoothly. Clicking ✨ switches to manual. On phones and tablets a joystick, jump and use buttons appear, and you can pinch to zoom.
 
 ### Extras
 

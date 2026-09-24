@@ -10,6 +10,16 @@
   <body>
     <div id="app"></div>
 
+    <div id="loader" role="status" aria-live="polite">
+      <div class="loader-card">
+        <div class="loader-packet"><span></span><span></span><span></span><span></span></div>
+        <h1>📦 Packet Quest</h1>
+        <div class="loader-bar"><i id="loader-fill"></i></div>
+        <p id="loader-step">Loading…</p>
+        <p id="loader-tip" class="muted small"></p>
+      </div>
+    </div>
+
     <div id="hud" hidden>
       <div id="topbar">
         <div class="brand">📦 Packet Quest</div>

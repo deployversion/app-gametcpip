@@ -14,6 +14,7 @@ import { Minimap } from './minimap.js';
 import { Particles } from './particles.js';
 import { RouteHologram } from './hologram.js';
 import { TouchControls } from './touch.js';
+import { AdaptiveQuality, TIERS } from './perf.js';
 
 const CONFETTI = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffd166', '#ffffff'];
 
@@ -46,7 +47,13 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 800);
     this.world = buildWorld(this.scene);
     this.post = createComposer(this.renderer, this.scene, this.camera);
-    this.highQuality = readQuality();
+    const saved = readQuality();
+    this.quality = new AdaptiveQuality({
+      // A manual choice turns auto-tuning off. Small screens start without glow.
+      tier: saved === 'high' ? 0 : saved === 'low' || window.innerWidth <= 760 ? 2 : 0,
+      auto: !saved,
+      onChange: (tier, automatic) => this.applyTier(tier, automatic),
+    });
     this.jump = { y: 0, v: 0 };
     this.packet = new PacketAvatar(this.scene);
     this.particles = new Particles(this.scene);
@@ -62,7 +69,7 @@ export class Game {
       onExplore: (from) => this.startExplore(from),
       onQuality: () => this.toggleQuality(),
     });
-    this.ui.setQuality(this.highQuality);
+    this.applyTier(TIERS[this.quality.tier], false);
     this.minimap = new Minimap(document.getElementById('minimap'));
     this.showMap = true;
     this.rush = new RouterRush({
@@ -507,15 +514,26 @@ export class Game {
   }
 
   toggleQuality() {
-    this.highQuality = !this.highQuality;
+    const high = !this.highQuality;
     try {
-      localStorage.setItem(QUALITY_KEY, this.highQuality ? 'high' : 'low');
+      localStorage.setItem(QUALITY_KEY, high ? 'high' : 'low');
     } catch {
       // storage unavailable: the choice just won't persist
     }
-    this.ui.setQuality(this.highQuality);
-    this.minimap = new Minimap(document.getElementById('minimap'));
-    this.showMap = true;
+    this.quality.auto = false;
+    this.quality.set(high ? Math.min(this.quality.tier, 1) : 2);
+  }
+
+  applyTier(tier, automatic) {
+    const ratio = Math.min(window.devicePixelRatio, tier.ratio);
+    this.renderer.setPixelRatio(ratio);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.post.composer.setPixelRatio(ratio);
+    this.post.setSize(window.innerWidth, window.innerHeight);
+    this.highQuality = tier.bloom;
+    this.world.sun.castShadow = tier.shadows;
+    this.ui.setQuality(tier.bloom, tier.name, this.quality.auto);
+    if (automatic) this.ui.toast(`Graphics set to ${tier.name} to keep the game smooth`);
   }
 
   // ------------------------------------------------------------ router rush
@@ -848,7 +866,9 @@ export class Game {
   }
 
   tick() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const realDt = this.clock.getDelta();
+    const dt = Math.min(realDt, 0.05);
+    this.quality.sample(realDt);
     this.time += dt;
     updateTweens(dt);
     this.particles.update(dt);
@@ -876,10 +896,9 @@ export class Game {
 function readQuality() {
   try {
     const saved = localStorage.getItem(QUALITY_KEY);
-    if (saved) return saved === 'high';
+    if (saved) return saved;
   } catch {
     // fall through to the default
   }
-  // Glow costs GPU time: default it off on small screens.
-  return window.innerWidth > 760;
+  return null;
 }
