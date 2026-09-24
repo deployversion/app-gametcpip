@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en" data-scenario="email">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Packet Quest: a 3D serious game where you become a packet and travel down and up the TCP/IP stack." />
+    <title>Packet Quest · The Postal Kingdom</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✉️</text></svg>" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud" hidden>
+      <div id="topbar">
+        <div class="brand">✉️ Packet Quest</div>
+        <div id="legend" aria-label="TCP/IP layers"></div>
+        <div class="score">Score <b id="score">0</b></div>
+        <button id="glossary-btn" class="hud-btn" title="Glossary (G)">📖 <b id="orb-count">0</b></button>
+        <button id="quality-btn" class="hud-btn" title="Glow effects on/off">✨</button>
+        <button id="mute-btn" class="hud-btn" title="Sound on/off">🔊</button>
+      </div>
+      <div id="objective"><span class="label">Objective</span><span id="objective-text"></span></div>
+      <div id="packet-panel">
+        <div class="title">Packet anatomy</div>
+        <div id="packet-card"></div>
+      </div>
+      <button id="prompt" hidden></button>
+      <div id="help">WASD / arrows or tap the ground to move · Shift sprint · Space jump · drag to look · scroll to zoom · E interact · G glossary · collect the glowing <b>?</b> letters</div>
+    </div>
+
+    <section id="panel" hidden aria-live="polite">
+      <header>
+        <div id="panel-layer"></div>
+        <h2 id="panel-title"></h2>
+      </header>
+      <div id="panel-body"></div>
+    </section>
+
+    <div id="toast" role="status"></div>
+
+    <div id="intro" class="overlay">
+      <div class="card">
+        <div class="kicker">A serious game about networking · The Postal Kingdom</div>
+        <h1>✉️ Packet Quest</h1>
+        <p>Alice wants a cat picture from <b>catpics.example</b>. <b>You are her letter.</b></p>
+        <p>Walk <b>down</b> the four terraces of Alicehold, one per TCP/IP layer, and get sealed in another envelope (a header) at each one. Ride the golden sky-roads across the Sea of Routes from watchtower to watchtower (router to router). Then climb <b>up</b> the terraces of Postmaster Keep while each layer opens one envelope.</p>
+        <div class="stack-mini">
+          <span style="--c:#b56cff">4 · Application</span>
+          <span style="--c:#ff8a3d">3 · Transport</span>
+          <span style="--c:#35d07f">2 · Internet</span>
+          <span style="--c:#3d9bff">1 · Link</span>
+        </div>
+        <p class="controls">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or tap the ground · drag to look around · <kbd>E</kbd> to use a station</p>
+        <div class="actions">
+          <button id="start-btn" class="primary big">Start the mission</button>
+          <button id="rush-btn" class="secondary big">⚡ Router Rush</button>
+          <button id="explore-btn" class="secondary big">🧭 Explore freely</button>
+        </div>
+        <p class="muted small">Router Rush is a 60-second bonus game: route as many packets as you can. Explore mode raises every portcullis so you can roam both kingdoms.</p>
+      </div>
+    </div>
+
+    <div id="glossary" class="overlay" hidden>
+      <div class="card wide">
+        <div class="kicker">Glossary</div>
+        <h1>📖 Knowledge cards</h1>
+        <p class="muted" id="glossary-progress"></p>
+        <div id="glossary-list"></div>
+        <button id="glossary-close" class="primary">Back to the game</button>
+      </div>
+    </div>
+
+    <div id="rush" class="overlay" hidden>
+      <div class="card wide rush-card">
+        <div class="rush-top">
+          <div><div class="kicker">Router Rush</div><div class="rush-level" id="rush-level"></div></div>
+          <div class="rush-stats"><span>⏱ <b id="rush-time">60</b>s</span><span>🔥 <b id="rush-streak">0</b></span><span>★ <b id="rush-score">0</b></span></div>
+        </div>
+        <div class="rush-bar"><i id="rush-bar"></i></div>
+        <div id="rush-play">
+          <p class="rush-q">You are a router. A packet arrives for <code id="rush-dest"></code>. Which row wins?</p>
+          <div id="rush-table" class="options table"></div>
+          <div id="rush-feedback" class="feedback"></div>
+        </div>
+        <div id="rush-over" hidden>
+          <h1 id="rush-final"></h1>
+          <p id="rush-final-detail" class="muted"></p>
+          <div class="actions">
+            <button id="rush-again" class="primary">Play again</button>
+            <button id="rush-back" class="secondary">Back</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="end" class="overlay" hidden>
+      <div class="card">
+        <div class="kicker">Mission complete</div>
+        <h1>🐱 Delivered!</h1>
+        <div id="end-stars" class="stars"></div>
+        <div id="end-score" class="end-score"></div>
+        <div id="end-detail" class="muted"></div>
+        <div id="end-report"></div>
+        <p>You went down the stack (encapsulation), across the network (routing, hop by hop) and up the stack again (decapsulation). The cat picture now makes the same trip back to Alice.</p>
+        <div class="actions">
+          <button id="restart-btn" class="primary big">Play again</button>
+          <button id="end-rush-btn" class="secondary big">⚡ Router Rush</button>
+          <button id="end-explore-btn" class="secondary big">🧭 Explore</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/worlds/kingdom/main.js"></script>
+  </body>
+</html>

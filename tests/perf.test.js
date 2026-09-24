@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AdaptiveQuality, TIERS } from '../src/perf.js';
+import { AdaptiveQuality, TIERS } from '../src/shared/perf.js';
 
 const run = (q, fps, seconds) => {
   for (let t = 0; t < seconds; t += 1 / fps) q.sample(1 / fps);

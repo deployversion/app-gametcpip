@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ipToInt, cidrContains, longestPrefixMatch, sameSubnet, segmentCount, segmentSeqNumbers, ttlAfterHops, firstMatchingRule, parseCidr,
-} from '../src/logic/net.js';
+} from '../src/shared/logic/net.js';
 
 test('ipToInt converts dotted quads', () => {
   assert.equal(ipToInt('0.0.0.0'), 0);
