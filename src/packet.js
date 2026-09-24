@@ -3,8 +3,9 @@ import { LAYERS } from './content.js';
 import { tween, ease } from './tween.js';
 import { makeLabel } from './labels.js';
 
-// You are the packet. The avatar is the application data at its core, with
-// one translucent shell per header wrapped around it.
+// You are the packet: a letter. The application data is the letter itself,
+// and every header wraps it in another translucent envelope, tied with the
+// layer's ribbon and stamped with its wax seal.
 const SHELL_SIZE = { transport: 1.35, internet: 1.8, link: 2.3 };
 
 export class PacketAvatar {
@@ -21,15 +22,31 @@ export class PacketAvatar {
     );
     this.body.add(this.spark);
 
-    this.core = new THREE.Mesh(
-      new THREE.BoxGeometry(0.9, 0.9, 0.9),
-      new THREE.MeshStandardMaterial({ color: LAYERS.app.color, emissive: LAYERS.app.color, emissiveIntensity: 0.8, roughness: 0.3 }),
+    // the letter: a folded parchment with a purple wax seal
+    this.core = new THREE.Group();
+    const paper = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.75, 0.16),
+      new THREE.MeshStandardMaterial({ color: '#f6e7c1', emissive: '#f2c46d', emissiveIntensity: 0.25, roughness: 0.7 }),
     );
-    this.core.castShadow = true;
+    paper.castShadow = true;
+    const flap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.62, 0.62, 0.02, 3, 1, false),
+      new THREE.MeshStandardMaterial({ color: '#e2c98f', roughness: 0.8 }),
+    );
+    flap.rotation.set(Math.PI / 2, 0, Math.PI);
+    flap.scale.set(1, 1, 0.55);
+    flap.position.set(0, 0.12, 0.09);
+    const seal = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.14, 0.14, 0.06, 16),
+      new THREE.MeshStandardMaterial({ color: LAYERS.app.color, emissive: LAYERS.app.color, emissiveIntensity: 0.9 }),
+    );
+    seal.rotation.x = Math.PI / 2;
+    seal.position.set(0, -0.02, 0.11);
+    this.core.add(paper, flap, seal);
     this.core.visible = false;
     this.body.add(this.core);
 
-    this.light = new THREE.PointLight('#ffffff', 12, 10, 1.6);
+    this.light = new THREE.PointLight('#ffe0b0', 7, 10, 1.6);
     this.light.position.y = 0.5;
     this.group.add(this.light);
 
@@ -69,13 +86,22 @@ export class PacketAvatar {
       new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.18, emissive: color, emissiveIntensity: 0.3, depthWrite: false }),
     );
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry), new THREE.LineBasicMaterial({ color, transparent: true }));
-    shell.add(box, edges);
+    // a ribbon tied around the envelope, and the layer's wax seal on front
+    const ribbonMat = new THREE.MeshBasicMaterial({ color, transparent: true });
+    const r1 = new THREE.Mesh(new THREE.BoxGeometry(size * 1.01, size * 0.08, size * 1.01), ribbonMat);
+    const r2 = new THREE.Mesh(new THREE.BoxGeometry(size * 0.08, size * 1.01, size * 1.01), ribbonMat);
+    const seal = new THREE.Mesh(new THREE.CylinderGeometry(size * 0.12, size * 0.12, 0.05, 16), new THREE.MeshBasicMaterial({ color, transparent: true }));
+    seal.rotation.x = Math.PI / 2;
+    seal.position.z = size / 2 + 0.03;
+    shell.add(box, edges, r1, r2, seal);
     this.body.add(shell);
     this.shells[layer] = shell;
+    const extras = shell.children.slice(2);
     await tween(0.7, (k) => {
       shell.scale.setScalar(3 - 2 * k);
       box.material.opacity = 0.18 * k;
       edges.material.opacity = k;
+      for (const e of extras) e.material.opacity = k * 0.85;
     }, ease.out);
   }
 
@@ -83,11 +109,12 @@ export class PacketAvatar {
     const shell = this.shells[layer];
     if (!shell) return;
     delete this.shells[layer];
-    const [box, edges] = shell.children;
+    const [box, edges, ...extras] = shell.children;
     await tween(0.6, (k) => {
       shell.scale.setScalar(1 + k * 2.5);
       box.material.opacity = 0.18 * (1 - k);
       edges.material.opacity = 1 - k;
+      for (const e of extras) e.material.opacity = 0.85 * (1 - k);
     }, ease.out);
     this.body.remove(shell);
   }
@@ -141,7 +168,7 @@ export class PacketAvatar {
     const on = Math.random() > 0.5;
     const b = new THREE.Mesh(
       new THREE.BoxGeometry(0.22, on ? 0.5 : 0.22, 0.22),
-      new THREE.MeshBasicMaterial({ color: on ? '#4be1ff' : '#1e6bff', transparent: true }),
+      new THREE.MeshBasicMaterial({ color: on ? '#ffe3a1' : '#f2a93b', transparent: true }),
     );
     b.position.copy(this.group.position).add(new THREE.Vector3((Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 0.8));
     b.userData.life = 1;

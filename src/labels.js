@@ -1,17 +1,17 @@
 import * as THREE from 'three';
 
 // Canvas-backed text sprite that always faces the camera.
-export function makeLabel(text, { color = '#ffffff', bg = 'rgba(8,12,32,0.72)', size = 1, font = 600, border = null } = {}) {
+export function makeLabel(text, { color = '#ffffff', bg = 'rgba(8,12,32,0.72)', size = 1, font = 600, border = null, family = '"Segoe UI", system-ui, sans-serif' } = {}) {
   const lines = String(text).split('\n');
   const px = 64;
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  ctx.font = `${font} ${px}px "Segoe UI", system-ui, sans-serif`;
+  ctx.font = `${font} ${px}px ${family}`;
   const width = Math.max(...lines.map((l) => ctx.measureText(l).width)) + px;
   const height = lines.length * px * 1.25 + px * 0.5;
   canvas.width = Math.ceil(width);
   canvas.height = Math.ceil(height);
-  ctx.font = `${font} ${px}px "Segoe UI", system-ui, sans-serif`;
+  ctx.font = `${font} ${px}px ${family}`;
   if (bg) {
     ctx.fillStyle = bg;
     roundRect(ctx, 0, 0, canvas.width, canvas.height, px * 0.4);
