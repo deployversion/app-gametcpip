@@ -26,6 +26,8 @@ Every layer is a different kind of railway place:
 
 Locked gates are level crossings whose barriers lift when you solve the station, and each station's semaphore clears. The network is a valley of stone viaducts between junction towers; other trains run the lines, and when the congested line near R4 drops you, the train derails off the viaduct. Around it all: a golden-hour sky, mountains, a forest, villages, a river, birds, and two trains circling the whole valley on a ring viaduct. Bloom glow can be toggled with ✨.
 
+Graphics detail tunes itself: if the frame rate drops, the game lowers resolution, then glow, then shadows, until it runs smoothly. Clicking ✨ switches to manual. On phones and tablets a joystick, jump and use buttons appear, and you can pinch to zoom. While the start card is up, the camera flies along the whole line with a caption naming each layer, and a soft generated soundscape (a drone, server hiss and data blips tuned to each layer) plays under the sound effects.
+
 ### Extras
 
 - **Explore freely.** From the start or end screen: every gate opens, and Express platforms carry you across the network between Alice's side and the server's side. Sprint with `Shift`, jump with `Space`.
