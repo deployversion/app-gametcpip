@@ -11,6 +11,9 @@ import { sfx } from './sound.js';
 import { RouterRush } from './rush.js';
 import { createComposer } from './effects.js';
 import { Minimap } from './minimap.js';
+import { Particles } from './particles.js';
+
+const CONFETTI = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffd166', '#ffffff'];
 
 const QUALITY_KEY = 'packetquest.quality';
 const SPRINT = 1.8;
@@ -44,6 +47,8 @@ export class Game {
     this.highQuality = readQuality();
     this.jump = { y: 0, v: 0 };
     this.packet = new PacketAvatar(this.scene);
+    this.particles = new Particles(this.scene);
+    this.shake = 0;
 
     this.ui = new UI({
       onStart: () => this.start(),
@@ -179,6 +184,9 @@ export class Game {
         this.state.results.push({ topic: step.topic, layer: st.layer, mistakes });
         this.state.score += points;
         this.ui.setScore(this.state.score, MAX_SCORE);
+        const at = this.packet.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+        this.particles.burst(at, mistakes ? 12 : 30, { color: CONFETTI, speed: 5, up: 3 });
+        this.particles.popup(at.add(new THREE.Vector3(0, 1.2, 0)), `+${points}`, mistakes ? '#cfd6ff' : '#ffd166');
       },
       onMistake: () => { this.state.mistakes++; },
     });
@@ -190,6 +198,7 @@ export class Game {
     if (s) {
       s.icon.material.color.set('#ffffff');
       s.icon.material.emissive.set('#9fffc8');
+      this.celebrateStation(s);
     }
     this.state.stationIndex++;
     if (GATE_X[st.id] !== undefined && st.id !== 'send-link') this.openGate(st.id);
@@ -200,10 +209,30 @@ export class Game {
     else this.state.mode = 'walk';
   }
 
+  celebrateStation(s) {
+    const top = s.position.clone().add(new THREE.Vector3(0, 3, 0));
+    this.particles.burst(top, 80, { color: CONFETTI, speed: 9, up: 6, life: 1.8 });
+    const check = makeLabel('✓', { size: 1.8, color: '#35d07f', bg: null, font: 900 });
+    check.position.set(0, 7, 0);
+    s.group.add(check);
+    s.check = check;
+    const spin = s.icon.rotation.y;
+    tween(1, (k) => {
+      s.icon.rotation.y = spin + k * Math.PI * 6;
+      check.scale.setScalar(k * 1.1 + 0.001);
+    }, ease.back);
+  }
+
   async openGate(id) {
     const gate = this.world.gates.get(id);
     gate.open = true;
     sfx.gate();
+    this.shake = 0.35;
+    const color = gate.field.material.color.getStyle();
+    const center = gate.group.position.clone().add(new THREE.Vector3(0, 2.5, 0));
+    for (let i = 0; i < 140; i++) {
+      this.particles.spawn(center, { color: [color, '#ffffff'], speed: 3, up: 1, life: 1.6, spread: new THREE.Vector3(0.4, 5, 34) });
+    }
     this.ui.toast(this.state.side === 'sender' ? 'Gate open! Go down the ramp to the next layer.' : 'Gate open! Climb up to the next layer.');
     await tween(0.8, (k) => { gate.group.scale.y = Math.max(0.001, 1 - k); }, ease.inOut);
     gate.group.visible = false;
@@ -417,6 +446,7 @@ export class Game {
   // ---------------------------------------------------------------- effects
   async fxShatter() {
     sfx.drop();
+    this.shake = 0.6;
     const origin = this.packet.position.clone();
     this.packet.body.visible = false;
     this.packet.tag.visible = false;
@@ -669,6 +699,11 @@ export class Game {
     this.camera.position.lerp(goal.pos, k);
     this.cam.target.lerp(goal.look, k);
     this.camera.lookAt(this.cam.target);
+    if (this.shake > 0.001) {
+      const a = this.shake;
+      this.camera.position.add(new THREE.Vector3((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a));
+      this.shake *= Math.exp(-dt * 6);
+    }
   }
 
   drawMinimap() {
@@ -696,6 +731,7 @@ export class Game {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.time += dt;
     updateTweens(dt);
+    this.particles.update(dt);
     if (this.state.mode === 'walk') this.walk(dt);
     else this.ui.showPrompt(null);
     this.packet.update(dt, this.time, this.moveDir);
