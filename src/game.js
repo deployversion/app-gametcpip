@@ -201,9 +201,11 @@ export class Game {
     const gate = this.world.gates.get(id);
     gate.open = true;
     sfx.gate();
-    this.ui.toast(this.state.side === 'sender' ? 'Gate open! Go down the ramp to the next layer.' : 'Gate open! Climb up to the next layer.');
-    await tween(0.8, (k) => { gate.group.scale.y = Math.max(0.001, 1 - k); }, ease.inOut);
-    gate.group.visible = false;
+    this.ui.toast(this.state.side === 'sender' ? 'The portcullis rises! Take the stairs down to the next layer.' : 'The portcullis rises! Climb the stairs to the next layer.');
+    // the portcullis rises into the gatehouse; the towers stay put
+    gate.lock.visible = false;
+    await tween(1.2, (k) => { gate.lift.position.y = k * 7.2; }, ease.inOut);
+    gate.lift.visible = false;
   }
 
   // ----------------------------------------------------------- network flight
@@ -229,7 +231,7 @@ export class Game {
       this.moveDir = dir;
     }, ease.inOut);
     this.moveDir = null;
-    if (cable) cable.material.color.set('#4be1ff');
+    if (cable) cable.material.color.set(cable.userData.baseColor);
   }
 
   cableBetween(a, b) {
@@ -238,7 +240,7 @@ export class Game {
 
   async flyFromSender() {
     this.state.mode = 'cinematic';
-    this.ui.setObjective('Riding the wire as bits…');
+    this.ui.setObjective('Riding the sky-road as bits…');
     this.packet.setBits(true);
     sfx.whoosh();
     const edge = NETWORK_EDGE.sender.clone().setY(HOVER);
@@ -348,11 +350,12 @@ export class Game {
     this.cinematicCam = null;
     for (const gate of this.world.gates.values()) {
       gate.open = true;
-      gate.group.visible = false;
+      gate.lift.visible = false;
+      gate.lock.visible = false;
     }
     for (const f of this.world.ferries.values()) f.group.visible = true;
     this.updateBeacons();
-    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on a ferry pad to fly across the network.');
+    this.ui.setObjective('Free exploration: roam both kingdoms, hunt the ? letters, and step on a ferry pier to sail across the Sea of Routes.');
     if (from === 'end') this.placeAt(SPAWN.receiver);
   }
 
@@ -678,7 +681,7 @@ export class Game {
     this.packet.update(dt, this.time, this.moveDir);
     this.world.update(this.time, dt);
     const p = this.packet.position;
-    this.world.sun.position.set(p.x + 25, p.y + 45, p.z + 20);
+    this.world.sun.position.copy(p).add(this.world.sun.userData.offset);
     this.world.sun.target.position.copy(p);
     if (this.state.mode === 'rush') {
       const a = this.time * 0.12;
