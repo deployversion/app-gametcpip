@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rushQuestion, makeRng } from '../src/logic/rush.js';
-import { cidrContains, parseCidr } from '../src/logic/net.js';
+import { rushQuestion, makeRng } from '../src/shared/logic/rush.js';
+import { cidrContains, parseCidr } from '../src/shared/logic/net.js';
 
 test('every Router Rush question has exactly one longest match', () => {
   const rng = makeRng(42);

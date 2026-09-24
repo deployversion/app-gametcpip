@@ -2,7 +2,19 @@
 
 A 3D serious game, built with [Three.js](https://threejs.org), that teaches the **TCP/IP stack** by making you the packet.
 
-Alice wants a cat picture from `catpics.example`. You are her HTTPS request:
+Packet Quest is a set of seven chapters. Each one is a practical, everyday thing people do online, played in its own 3D world. Pick one from the scenario menu:
+
+| Chapter | Scenario | World | What it adds |
+| --- | --- | --- | --- |
+| 1 | 🐱 Loading a website | The physical internet: Wi-Fi, fibre, undersea cable, data centre | Connection reuse, the browser cache (304) |
+| 2 | 📹 Joining a video call | The deep ocean | Why calls use UDP, speed-of-light delay through undersea cables |
+| 3 | ✉️ Sending an email | The postal kingdom | MX records in DNS, SMTP between mail servers |
+| 4 | 💾 Downloading a file | The railway (you are a train, headers are wagons) | TCP flow control, resuming with HTTP Range |
+| 5 | 🎬 Streaming a video | Space stations | Adaptive bitrate chunks, CDNs |
+| 6 | 🎮 Playing an online game | The block (voxel) world | UDP for game state, ping |
+| 7 | 💬 Sending a chat message | The neon cyberpunk city | Long-lived connections, end-to-end encryption |
+
+Every chapter plays the same core lesson. You are Alice's request, and in each world you:
 
 1. **Down the sender's stack.** Walk down four plateaus, one per layer. At each station you answer questions and get wrapped in that layer's header (encapsulation).
    - **Application** · DNS lookup, choosing HTTPS on port 443
@@ -14,9 +26,11 @@ Alice wants a cat picture from `catpics.example`. You are her HTTPS request:
 
 The **Packet anatomy** panel shows your current headers and their fields at all times. Correct first answers are worth 100 points, with fewer points for later tries and an explanation for every wrong answer.
 
-### The world
+### The worlds
 
-Every layer plateau has its own scenery: a neon **app city** with floating app windows and a DNS kiosk, a **container harbor** with a gantry crane, port-numbered containers and a conveyor of TCP segments, an **IP plaza** with a holographic globe, routing signposts and mailboxes, and a **server room** with blinking racks, a light-pulse cable tray, a Wi-Fi mast and a switch. Other people's packets wander the plateaus and zip along every network cable, all above an animated data ocean under an aurora sky, with bloom glow (toggle with ✨). Graphics detail tunes itself: if the frame rate drops, the game lowers resolution, then glow, then shadows, until it runs smoothly. Clicking ✨ switches to manual. On phones and tablets a joystick, jump and use buttons appear, and you can pinch to zoom. While the start card is up, the camera flies over the whole journey with a caption naming each layer, and a soft generated soundscape (a drone, server hiss and data blips tuned to each layer) plays under the sound effects.
+Each world is its own page, so the menu loads instantly and a world's 3D code only downloads when you pick it. The intro card of every chapter shows the scenario's story and a few real-life facts; the end card repeats them and remembers your best score per chapter, which the menu shows.
+
+The ocean, railway and space worlds include the later polish rounds: minimap, holographic routing tables over the routers, adaptive graphics quality, touch controls, a loading screen and an intro flythrough with a soundscape. The physical internet, postal kingdom, block world and neon city were built before those rounds and don't have them yet.
 
 ### Extras
 
@@ -49,22 +63,18 @@ npm run build    # static build in dist/
 
 ## Project layout
 
-| File | What it holds |
+| Path | What it holds |
 | --- | --- |
-| `src/content.js` | The whole lesson: network constants, routing tables and every station's steps. Edit this to change or translate questions. |
-| `src/logic/net.js` | Pure helpers (CIDR matching, longest prefix match, firewall rule matching, segmentation, TTL) used by the content and covered by tests. |
-| `src/logic/rush.js` | Seeded question generator for Router Rush. |
-| `src/glossary.js` | Knowledge orb cards and where they are hidden. |
-| `src/rush.js` | The Router Rush bonus game UI. |
-| `src/sound.js` | Synthesized sound effects. |
-| `src/world.js` | The 3D world: layer plateaus, stations, gates, routers, cables, network traffic and ferry pads. |
-| `src/environment.js` | Themed scenery per layer, wandering NPC packets and prop colliders. |
-| `src/effects.js` | Bloom post-processing, the sky dome and the data ocean shaders. |
-| `src/packet.js` | The player avatar: the data core plus one shell per header. |
-| `src/game.js` | Game loop, movement, camera, station flow and network flight. |
-| `src/ui.js` | HUD, packet anatomy card and the station panel that runs the steps. |
+| `index.html`, `src/menu/` | The scenario menu (no Three.js, so it opens instantly). Thumbnails live in `public/thumbs/`. |
+| `src/shared/scenarios.js` | The seven scenarios: story, server, the request you carry, two scenario questions and the real-life facts. |
+| `src/shared/content.js` | The shared lesson. `buildContent(scenario)` builds every station's steps for one scenario; the page's scenario comes from `<html data-scenario>`. |
+| `src/shared/scenario-ui.js` | Puts the chapter title, story, facts and the "All scenarios" button on a world's start and end cards. |
+| `src/shared/logic/` | Pure networking helpers and the Router Rush generator, covered by tests. |
+| `src/shared/` (rest) | Code that several worlds use unchanged: labels, tween, perf tuning, touch controls, glossary. |
+| `worlds/<world>/index.html` | One page per world. |
+| `src/worlds/<world>/` | That world's own code: `main.js`, `game.js`, `world.js` and its scenery modules (`geography.js`, `ocean.js`, `kingdom.js`, `trains.js`, `space.js`, `voxel/`, `city.js`). |
 
-Steps in `src/content.js` are plain data (`info`, `choice` or `order`) with optional `onEnter` / `onSolve` hooks, so adding a station is mostly writing questions.
+Steps in `src/shared/content.js` are plain data (`info`, `choice` or `order`) with optional `onEnter` / `onSolve` hooks, so adding a station is mostly writing questions.
 
 ## Deploying
 

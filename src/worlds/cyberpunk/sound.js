@@ -1,0 +1,99 @@
+// Tiny synthesized sound effects (Web Audio), so the game ships no audio files.
+const STORAGE_KEY = 'packetquest.muted';
+
+class Sfx {
+  constructor() {
+    this.ctx = null;
+    try {
+      this.muted = localStorage.getItem(STORAGE_KEY) === '1';
+    } catch {
+      this.muted = false;
+    }
+  }
+
+  // Browsers only allow audio after a user gesture, so call this from one.
+  unlock() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.25;
+    this.master.connect(this.ctx.destination);
+  }
+
+  setMuted(muted) {
+    this.muted = muted;
+    if (this.bed) this.bed.gain.setTargetAtTime(muted ? 0 : 1, this.ctx.currentTime, 0.2);
+    try {
+      localStorage.setItem(STORAGE_KEY, muted ? '1' : '0');
+    } catch {
+      // storage unavailable: the setting just won't persist
+    }
+  }
+
+  tone(freq, { at = 0, dur = 0.15, type = 'sine', vol = 1, slide = null } = {}) {
+    if (!this.ctx || this.muted) return;
+    const t = this.ctx.currentTime + at;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(slide, t + dur);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain).connect(this.master);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  // Rain hiss and a low city hum, looping quietly under everything.
+  ambience() {
+    if (!this.ctx || this.bed) return;
+    const ctx = this.ctx;
+    this.bed = ctx.createGain();
+    this.bed.gain.value = this.muted ? 0 : 1;
+    this.bed.connect(this.master);
+    const len = ctx.sampleRate * 2;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    noise.loop = true;
+    const hiss = ctx.createBiquadFilter();
+    hiss.type = 'bandpass';
+    hiss.frequency.value = 2400;
+    hiss.Q.value = 0.4;
+    const rainGain = ctx.createGain();
+    rainGain.gain.value = 0.16;
+    noise.connect(hiss).connect(rainGain).connect(this.bed);
+    noise.start();
+    for (const f of [55, 55.7, 82.4]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = f;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 160;
+      const g = ctx.createGain();
+      g.gain.value = 0.05;
+      osc.connect(lp).connect(g).connect(this.bed);
+      osc.start();
+    }
+  }
+
+  correct() { [523, 659, 784].forEach((f, i) => this.tone(f, { at: i * 0.07, dur: 0.18, type: 'triangle' })); }
+  wrong() { this.tone(160, { dur: 0.25, type: 'sawtooth', vol: 0.5, slide: 110 }); }
+  click() { this.tone(880, { dur: 0.05, type: 'square', vol: 0.2 }); }
+  collect() { [988, 1319, 1568, 2093].forEach((f, i) => this.tone(f, { at: i * 0.05, dur: 0.12, vol: 0.5 })); }
+  whoosh() { this.tone(220, { dur: 0.5, type: 'triangle', vol: 0.4, slide: 880 }); }
+  gate() { [392, 523, 659].forEach((f) => this.tone(f, { dur: 0.5, type: 'triangle', vol: 0.4 })); }
+  drop() { this.tone(600, { dur: 0.7, type: 'sawtooth', vol: 0.5, slide: 60 }); }
+  jump() { this.tone(330, { dur: 0.18, type: 'triangle', vol: 0.25, slide: 660 }); }
+  discover() { [659, 880, 1175].forEach((f, i) => this.tone(f, { at: i * 0.09, dur: 0.3, type: 'square', vol: 0.18 })); }
+  fanfare() { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => this.tone(f, { at: i * 0.11, dur: 0.25, type: 'triangle' })); }
+}
+
+export const sfx = new Sfx();
