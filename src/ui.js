@@ -269,7 +269,13 @@ export class UI {
         const b = document.createElement('button');
         b.className = step.table ? 'row' : 'option';
         b.innerHTML = Array.isArray(opt.label) ? opt.label.map((c) => `<span>${c}</span>`).join('') : opt.label;
+        const optIndex = step.options.indexOf(opt);
+        const hover = (i) => hooks.onHover?.(step, i);
+        b.addEventListener('mouseenter', () => { if (!b.disabled) hover(optIndex); });
+        b.addEventListener('focus', () => { if (!b.disabled) hover(optIndex); });
+        b.addEventListener('mouseleave', () => hover(-1));
         b.addEventListener('click', () => {
+          hooks.onPick?.(step, optIndex, !!opt.correct);
           if (opt.correct) {
             b.classList.add('right');
             list.querySelectorAll('button').forEach((x) => { x.disabled = true; });

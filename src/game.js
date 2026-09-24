@@ -12,6 +12,7 @@ import { RouterRush } from './rush.js';
 import { createComposer } from './effects.js';
 import { Minimap } from './minimap.js';
 import { Particles } from './particles.js';
+import { RouteHologram } from './hologram.js';
 
 const CONFETTI = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffd166', '#ffffff'];
 
@@ -48,6 +49,8 @@ export class Game {
     this.jump = { y: 0, v: 0 };
     this.packet = new PacketAvatar(this.scene);
     this.particles = new Particles(this.scene);
+    this.hologram = new RouteHologram(this.scene);
+    this.hoverCable = null;
     this.shake = 0;
 
     this.ui = new UI({
@@ -252,6 +255,11 @@ export class Game {
         this.particles.popup(at.add(new THREE.Vector3(0, 1.2, 0)), `+${points}`, mistakes ? '#cfd6ff' : '#ffd166');
       },
       onMistake: () => { this.state.mistakes++; },
+      onHover: (step, i) => this.previewRoute(step, i),
+      onPick: (step, i, correct) => {
+        if (step.route && correct) this.hologram.setChosen(i);
+        if (step.route && !correct) this.shake = 0.15;
+      },
     });
     this.completeStation(st);
   }
@@ -343,7 +351,31 @@ export class Game {
     this.openStation();
   }
 
+  // Hovering a routing-table row lights the cable that row would use.
+  previewRoute(step, i) {
+    if (!step.route) return;
+    this.hologram.setHover(i);
+    if (this.hoverCable) this.hoverCable.material.color.set('#4be1ff');
+    this.hoverCable = null;
+    if (i < 0) return;
+    const route = ROUTES.find((r) => r.id === step.route);
+    const to = route.options[i];
+    const cable = to === 'LAN' ? this.world.cables.get('LAN-GW') : this.cableBetween(route.id, to);
+    if (cable) {
+      cable.material.color.set('#ffd166');
+      this.hoverCable = cable;
+    }
+    const node = this.world.routers.get(to);
+    if (node) {
+      node.beacon.visible = true;
+      clearTimeout(this.beaconTimer);
+      this.beaconTimer = setTimeout(() => { node.beacon.visible = this.station?.router === node.id; }, 900);
+    }
+  }
+
   async routerArrive(index, patch) {
+    const r = this.world.routers.get(ROUTES[index].id);
+    this.hologram.show(ROUTES[index], r.group.position);
     await this.removeLayer('link');
     this.patchLayer('internet', { ...patch, ttl: this.state.packet.internet.ttl - 1 });
     this.ui.toast(`TTL lowered to ${this.state.packet.internet.ttl}`);
@@ -353,7 +385,10 @@ export class Game {
     this.state.mode = 'cinematic';
     const from = ROUTES[index].id;
     this.ui.setObjective(`Forwarding to ${next === 'SW' ? 'the server LAN' : next}…`);
+    if (this.hoverCable) this.hoverCable.material.color.set('#4be1ff');
+    this.hoverCable = null;
     await this.setLayer('link', { ...ROUTES[index].frame, type: 'IPv4', fcs: 'OK' });
+    this.hologram.hide();
     await wait(0.3);
     this.packet.setBits(true);
     sfx.whoosh();
@@ -795,6 +830,7 @@ export class Game {
     this.time += dt;
     updateTweens(dt);
     this.particles.update(dt);
+    this.hologram.update(dt, this.time);
     if (this.state.mode === 'walk') this.walk(dt);
     else this.ui.showPrompt(null);
     this.packet.update(dt, this.time, this.moveDir);
