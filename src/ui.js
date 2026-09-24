@@ -20,7 +20,7 @@ export function pointsFor(mistakes) {
 }
 
 export class UI {
-  constructor({ onStart, onRestart, onInteract, onRush }) {
+  constructor({ onStart, onRestart, onInteract, onRush, onExplore, onQuality }) {
     this.panel = $('#panel');
     this.panelTitle = $('#panel-title');
     this.panelLayer = $('#panel-layer');
@@ -32,6 +32,9 @@ export class UI {
     this.prompt.addEventListener('click', onInteract);
     $('#rush-btn').addEventListener('click', () => onRush('intro'));
     $('#end-rush-btn').addEventListener('click', () => onRush('end'));
+    $('#explore-btn').addEventListener('click', () => onExplore('intro'));
+    $('#end-explore-btn').addEventListener('click', () => onExplore('end'));
+    $('#quality-btn').addEventListener('click', onQuality);
     $('#glossary-btn').addEventListener('click', () => this.toggleGlossary());
     $('#glossary-close').addEventListener('click', () => this.toggleGlossary(false));
     const mute = $('#mute-btn');
@@ -44,6 +47,13 @@ export class UI {
     this.collected = new Set();
     this.buildLegend();
     this.renderGlossary();
+  }
+
+  setQuality(high, name = '', auto = false) {
+    const b = $('#quality-btn');
+    b.classList.toggle('off', !high);
+    const mode = `Graphics: ${name}${auto ? ' (auto)' : ''}`;
+    b.title = `${mode}. Glow ${high ? 'on (click to turn off)' : 'off (click to turn on)'}`;
   }
 
   // ------------------------------------------------------------ glossary
@@ -116,6 +126,11 @@ export class UI {
     this.toastEl.classList.add('show');
   }
 
+  setAttractCaption(text) {
+    const el = $('#attract-caption');
+    if (el.textContent !== text) el.textContent = text;
+  }
+
   hideIntro() {
     $('#intro').hidden = true;
     $('#hud').hidden = false;
@@ -148,7 +163,7 @@ export class UI {
     const order = ['link', 'internet', 'transport', 'app'];
     const present = order.filter((k) => packet[k]);
     if (!present.length) {
-      card.innerHTML = '<div class="empty">You are an empty spark. No data yet.</div>';
+      card.innerHTML = '<div class="empty">You are an empty engine. No cargo yet.</div>';
       return;
     }
     const outer = present[0];
@@ -176,11 +191,13 @@ export class UI {
     if (station.side === 'network') this.panelLayer.textContent = station.router ? 'Router · Internet layer' : `Network · ${layer.name} layer`;
     else this.panelLayer.textContent = `Layer ${layer.num} · ${layer.name} · ${station.side}`;
     this.panel.hidden = false;
+    document.body.classList.add('panel-open');
     return new Promise((resolve) => {
       let i = 0;
       const next = () => {
         if (i >= station.steps.length) {
           this.panel.hidden = true;
+          document.body.classList.remove('panel-open');
           resolve();
           return;
         }
@@ -258,7 +275,13 @@ export class UI {
         const b = document.createElement('button');
         b.className = step.table ? 'row' : 'option';
         b.innerHTML = Array.isArray(opt.label) ? opt.label.map((c) => `<span>${c}</span>`).join('') : opt.label;
+        const optIndex = step.options.indexOf(opt);
+        const hover = (i) => hooks.onHover?.(step, i);
+        b.addEventListener('mouseenter', () => { if (!b.disabled) hover(optIndex); });
+        b.addEventListener('focus', () => { if (!b.disabled) hover(optIndex); });
+        b.addEventListener('mouseleave', () => hover(-1));
         b.addEventListener('click', () => {
+          hooks.onPick?.(step, optIndex, !!opt.correct);
           if (opt.correct) {
             b.classList.add('right');
             list.querySelectorAll('button').forEach((x) => { x.disabled = true; });

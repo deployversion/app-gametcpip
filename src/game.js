@@ -9,6 +9,22 @@ import { tween, updateTweens, wait, ease } from './tween.js';
 import { makeLabel } from './labels.js';
 import { sfx } from './sound.js';
 import { RouterRush } from './rush.js';
+import { createComposer, SUN_DIR } from './effects.js';
+import { makeLoco, makeWagon } from './trains.js';
+import { Minimap } from './minimap.js';
+import { Particles } from './particles.js';
+import { RouteHologram } from './hologram.js';
+import { TouchControls } from './touch.js';
+import { AdaptiveQuality, TIERS } from './perf.js';
+import { Flythrough } from './attract.js';
+
+const CONFETTI = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffd166', '#ffffff'];
+
+const QUALITY_KEY = 'packetquest.quality';
+const SPRINT = 1.8;
+const JUMP_SPEED = 9;
+const GRAVITY = 26;
+const FERRY_RADIUS = 1.8;
 
 const BEST_KEY = 'packetquest.bestScore';
 const ORB_RADIUS = 1.8;
@@ -22,7 +38,7 @@ const MAX_SCORE = STATIONS.flatMap((s) => s.steps).filter((s) => s.type !== 'inf
 export class Game {
   constructor(container) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -32,14 +48,32 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 800);
     this.world = buildWorld(this.scene);
+    this.post = createComposer(this.renderer, this.scene, this.camera);
+    const saved = readQuality();
+    this.quality = new AdaptiveQuality({
+      // A manual choice turns auto-tuning off. Small screens start without glow.
+      tier: saved === 'high' ? 0 : saved === 'low' || window.innerWidth <= 760 ? 2 : 0,
+      auto: !saved,
+      onChange: (tier, automatic) => this.applyTier(tier, automatic),
+    });
+    this.jump = { y: 0, v: 0 };
     this.packet = new PacketAvatar(this.scene);
+    this.particles = new Particles(this.scene);
+    this.hologram = new RouteHologram(this.scene);
+    this.hoverCable = null;
+    this.shake = 0;
 
     this.ui = new UI({
       onStart: () => this.start(),
       onRestart: () => window.location.reload(),
       onInteract: () => this.tryInteract(),
       onRush: (from) => this.startRush(from),
+      onExplore: (from) => this.startExplore(from),
+      onQuality: () => this.toggleQuality(),
     });
+    this.applyTier(TIERS[this.quality.tier], false);
+    this.minimap = new Minimap(document.getElementById('minimap'));
+    this.showMap = true;
     this.rush = new RouterRush({
       onExit: () => this.exitRush(),
       onCorrect: () => this.flashRandomRouter(),
@@ -65,7 +99,12 @@ export class Game {
     this.after = null;
 
     this.placeAt(SPAWN.sender);
-    this.snapCamera();
+    this.flythrough = new Flythrough();
+    this.attractCam = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
+    this.cinematicCam = this.attractCam;
+    this.stepAttract(0);
+    this.camera.position.copy(this.attractCam.pos);
+    this.cam.target.copy(this.attractCam.look);
     this.ui.renderPacket(this.state.packet);
     this.ui.setScore(0, MAX_SCORE);
     this.bindInput();
@@ -95,7 +134,69 @@ export class Game {
   setLayer(layer, fields) {
     this.state.packet = { ...this.state.packet, [layer]: fields };
     this.ui.renderPacket(this.state.packet);
-    this.packet.addLayer(layer);
+    return this.flyPlate(layer, fields, 'in').then(() => {
+      // The header may already have been stripped again while the plate flew.
+      if (this.state.packet[layer]) return this.packet.addLayer(layer);
+      return undefined;
+    });
+  }
+
+  // Where header plates come from: the open station's hologram, or the
+  // router the packet is visiting.
+  plateSource() {
+    const st = STATIONS[this.state.stationIndex];
+    const s = st && this.world.stations.get(st.id);
+    if (s) return s.position.clone().add(new THREE.Vector3(0, 3, 0));
+    const r = st?.router && this.world.routers.get(st.router);
+    if (r) return r.group.position.clone().add(new THREE.Vector3(0, 3, 0));
+    return this.packet.position.clone().add(new THREE.Vector3(0, 6, 0));
+  }
+
+  // A labelled header plate flies onto the packet (encapsulation) or peels
+  // off and drifts away (decapsulation).
+  async flyPlate(layer, fields, dir) {
+    const l = LAYERS[layer];
+    const f = fields ?? {};
+    const summary = {
+      app: () => `GET /cat.png · ${f.proto ?? 'HTTPS'}`,
+      transport: () => `port ${f.srcPort} → ${f.dstPort} · seq ${f.seq}`,
+      internet: () => `${f.src} → ${f.dst} · TTL ${f.ttl}`,
+      link: () => `${f.src} → ${f.dst}`,
+    }[layer]();
+    const title = layer === 'app' ? 'DATA' : `${l.header.toUpperCase()} HEADER`;
+    const text = `${dir === 'in' ? '+ ' : '− '}${title}` + '\n' + summary;
+    const plate = makeLabel(text, { size: 0.55, color: l.color, bg: 'rgba(8,12,34,0.92)', border: l.color });
+    plate.renderOrder = 10;
+    plate.material.depthTest = false;
+    this.scene.add(plate);
+    const baseScale = plate.scale.clone();
+    const target = () => this.packet.position.clone().add(new THREE.Vector3(0, 0.3, 0));
+    if (dir === 'in') {
+      const from = this.plateSource();
+      await tween(0.35, (k) => {
+        plate.position.copy(from);
+        plate.scale.copy(baseScale).multiplyScalar(k);
+      }, ease.back);
+      await wait(0.5);
+      await tween(0.7, (k) => {
+        const to = target();
+        plate.position.lerpVectors(from, to, k);
+        plate.position.y += Math.sin(k * Math.PI) * 2.5;
+        plate.scale.copy(baseScale).multiplyScalar(1 - k * 0.9);
+      }, ease.inOut);
+      this.particles.burst(target(), 18, { color: [l.color, '#ffffff'], speed: 4, up: 1 });
+    } else {
+      const from = target();
+      const away = from.clone().add(new THREE.Vector3(0, 5, 0));
+      await tween(1.3, (k) => {
+        plate.position.lerpVectors(from, away, k);
+        plate.scale.copy(baseScale).multiplyScalar(0.3 + k * 0.7);
+        plate.material.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+      }, ease.out);
+    }
+    this.scene.remove(plate);
+    plate.material.map.dispose();
+    plate.material.dispose();
   }
 
   patchLayer(layer, fields) {
@@ -104,19 +205,29 @@ export class Game {
   }
 
   removeLayer(layer) {
-    const { [layer]: _removed, ...rest } = this.state.packet;
+    const { [layer]: removed, ...rest } = this.state.packet;
     this.state.packet = rest;
     this.ui.renderPacket(this.state.packet);
+    this.flyPlate(layer, removed, 'out');
     return this.packet.removeLayer(layer);
   }
 
   // --------------------------------------------------------------- game flow
   get station() {
-    return STATIONS[this.state.stationIndex];
+    return this.state.explore ? undefined : STATIONS[this.state.stationIndex];
+  }
+
+  // Intro backdrop: glide over the world while the start card is shown.
+  stepAttract(dt) {
+    const { pos, look, caption } = this.flythrough.step(dt);
+    this.attractCam.pos.copy(pos);
+    this.attractCam.look.copy(look);
+    this.ui.setAttractCaption(caption);
   }
 
   start() {
     sfx.unlock();
+    this.cinematicCam = null;
     this.ui.hideIntro();
     this.state.mode = 'walk';
     this.state.startedAt = performance.now();
@@ -163,8 +274,16 @@ export class Game {
         this.state.results.push({ topic: step.topic, layer: st.layer, mistakes });
         this.state.score += points;
         this.ui.setScore(this.state.score, MAX_SCORE);
+        const at = this.packet.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+        this.particles.burst(at, mistakes ? 12 : 30, { color: CONFETTI, speed: 5, up: 3 });
+        this.particles.popup(at.add(new THREE.Vector3(0, 1.2, 0)), `+${points}`, mistakes ? '#cfd6ff' : '#ffd166');
       },
       onMistake: () => { this.state.mistakes++; },
+      onHover: (step, i) => this.previewRoute(step, i),
+      onPick: (step, i, correct) => {
+        if (step.route && correct) this.hologram.setChosen(i);
+        if (step.route && !correct) this.shake = 0.15;
+      },
     });
     this.completeStation(st);
   }
@@ -174,6 +293,8 @@ export class Game {
     if (s) {
       s.icon.material.color.set('#ffffff');
       s.icon.material.emissive.set('#9fffc8');
+      s.clear?.();
+      this.celebrateStation(s);
     }
     this.state.stationIndex++;
     if (GATE_X[st.id] !== undefined && st.id !== 'send-link') this.openGate(st.id);
@@ -184,13 +305,33 @@ export class Game {
     else this.state.mode = 'walk';
   }
 
+  celebrateStation(s) {
+    const top = s.position.clone().add(new THREE.Vector3(0, 3, 0));
+    this.particles.burst(top, 80, { color: CONFETTI, speed: 9, up: 6, life: 1.8 });
+    const check = makeLabel('✓', { size: 1.8, color: '#35d07f', bg: null, font: 900 });
+    check.position.set(0, 7, 0);
+    s.group.add(check);
+    s.check = check;
+    const spin = s.icon.rotation.y;
+    tween(1, (k) => {
+      s.icon.rotation.y = spin + k * Math.PI * 6;
+      check.scale.setScalar(k * 1.1 + 0.001);
+    }, ease.back);
+  }
+
   async openGate(id) {
     const gate = this.world.gates.get(id);
     gate.open = true;
     sfx.gate();
-    this.ui.toast(this.state.side === 'sender' ? 'Gate open! Go down the ramp to the next layer.' : 'Gate open! Climb up to the next layer.');
-    await tween(0.8, (k) => { gate.group.scale.y = Math.max(0.001, 1 - k); }, ease.inOut);
-    gate.group.visible = false;
+    sfx.whistle();
+    this.shake = 0.35;
+    const color = gate.color;
+    const center = gate.group.position.clone().add(new THREE.Vector3(0, 2.5, 0));
+    for (let i = 0; i < 140; i++) {
+      this.particles.spawn(center, { color: [color, '#ffffff'], speed: 3, up: 1, life: 1.6, spread: new THREE.Vector3(0.4, 5, 34) });
+    }
+    this.ui.toast(this.state.side === 'sender' ? 'Barriers up! Ride down the ramp to the next layer.' : 'Barriers up! Climb up to the next layer.');
+    await tween(1.2, (k) => gate.raise(k), ease.inOut);
   }
 
   // ----------------------------------------------------------- network flight
@@ -204,7 +345,11 @@ export class Game {
       lens.push(l);
       total += l;
     }
-    if (cable) cable.material.color.set('#ffffff');
+    const lit = cable && { color: cable.material.color.clone(), opacity: cable.material.opacity };
+    if (cable) {
+      cable.material.color.set('#ffffff');
+      cable.material.opacity = 1;
+    }
     const dir = new THREE.Vector3();
     await tween(total / speed, (k) => {
       let d = k * total;
@@ -216,7 +361,10 @@ export class Game {
       this.moveDir = dir;
     }, ease.inOut);
     this.moveDir = null;
-    if (cable) cable.material.color.set('#4be1ff');
+    if (cable) {
+      cable.material.color.copy(lit.color);
+      cable.material.opacity = lit.opacity;
+    }
   }
 
   cableBetween(a, b) {
@@ -225,9 +373,10 @@ export class Game {
 
   async flyFromSender() {
     this.state.mode = 'cinematic';
-    this.ui.setObjective('Riding the wire as bits…');
+    this.ui.setObjective('Riding the rails as bits on the wire…');
     this.packet.setBits(true);
     sfx.whoosh();
+    sfx.whistle();
     const edge = NETWORK_EDGE.sender.clone().setY(HOVER);
     await this.travel([edge], 12);
     await this.travel([nodePosition('GW').add(new THREE.Vector3(0, 1.5, 0))], 16, this.world.cables.get('LAN-GW'));
@@ -235,7 +384,31 @@ export class Game {
     this.openStation();
   }
 
+  // Hovering a routing-table row lights the cable that row would use.
+  previewRoute(step, i) {
+    if (!step.route) return;
+    this.hologram.setHover(i);
+    if (this.hoverCable) this.hoverCable.material.color.set(this.world.liveColor);
+    this.hoverCable = null;
+    if (i < 0) return;
+    const route = ROUTES.find((r) => r.id === step.route);
+    const to = route.options[i];
+    const cable = to === 'LAN' ? this.world.cables.get('LAN-GW') : this.cableBetween(route.id, to);
+    if (cable) {
+      cable.material.color.set('#ffd166');
+      this.hoverCable = cable;
+    }
+    const node = this.world.routers.get(to);
+    if (node) {
+      node.beacon.visible = true;
+      clearTimeout(this.beaconTimer);
+      this.beaconTimer = setTimeout(() => { node.beacon.visible = this.station?.router === node.id; }, 900);
+    }
+  }
+
   async routerArrive(index, patch) {
+    const r = this.world.routers.get(ROUTES[index].id);
+    this.hologram.show(ROUTES[index], r.group.position);
     await this.removeLayer('link');
     this.patchLayer('internet', { ...patch, ttl: this.state.packet.internet.ttl - 1 });
     this.ui.toast(`TTL lowered to ${this.state.packet.internet.ttl}`);
@@ -244,9 +417,12 @@ export class Game {
   async flyToNextHop(index, next) {
     this.state.mode = 'cinematic';
     const from = ROUTES[index].id;
-    this.setLayer('link', { ...ROUTES[index].frame, type: 'IPv4', fcs: 'OK' });
     this.ui.setObjective(`Forwarding to ${next === 'SW' ? 'the server LAN' : next}…`);
-    await wait(0.5);
+    if (this.hoverCable) this.hoverCable.material.color.set(this.world.liveColor);
+    this.hoverCable = null;
+    await this.setLayer('link', { ...ROUTES[index].frame, type: 'IPv4', fcs: 'OK' });
+    this.hologram.hide();
+    await wait(0.3);
     this.packet.setBits(true);
     sfx.whoosh();
     const up = new THREE.Vector3(0, 1.5, 0);
@@ -257,7 +433,8 @@ export class Game {
       await this.travel([mid], 16, cable);
       this.packet.setBits(false);
       cable.material.color.set('#ff5d73');
-      this.ui.toast('Queue full at R4: packet dropped!');
+      cable.material.opacity = 0.9;
+      this.ui.toast('Line jammed near R4: the train is dropped!');
       await this.fxShatter();
       this.openStation();
       return;
@@ -307,22 +484,94 @@ export class Game {
     }
     this.cinematicCam = { pos: new THREE.Vector3(10, 70, 110), look: new THREE.Vector3(10, 0, 0) };
 
+    // The reply is a train too: an engine hauling the cat picture home.
     const reply = new THREE.Group();
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(1.2, 24, 16), new THREE.MeshStandardMaterial({ color: '#ff6fb5', emissive: '#ff6fb5', emissiveIntensity: 0.9 }));
+    const engine = makeLoco({ color: '#c2407e', trim: '#ffd27a' });
+    const cargo = makeWagon({ color: '#ff6fb5', title: '200 OK', detail: 'cat.png 🐱', kind: 'box' });
+    cargo.group.position.z = -3.2;
+    engine.group.position.y = -1;
+    cargo.group.position.y = -1;
     const tag = makeLabel('🐱 200 OK', { size: 1.4, color: '#fff', border: '#ff6fb5' });
-    tag.position.y = 2.6;
-    reply.add(ball, tag, new THREE.PointLight('#ff6fb5', 30, 20, 1.5));
+    tag.position.y = 3.2;
+    reply.add(engine.group, cargo.group, tag, new THREE.PointLight('#ff6fb5', 30, 20, 1.5));
+    reply.scale.setScalar(1.3);
     this.scene.add(reply);
+    sfx.whistle();
 
     const xs = [140, 132, 117, 104, 91, 78, 65, 52];
     const route = xs.map((x) => new THREE.Vector3(x, heightAt(x) + 2, 0));
     for (const id of ['SW', 'R4', 'R1', 'GW']) route.push(nodePosition(id).add(new THREE.Vector3(0, 2, 0)));
     for (const x of [-10, -23, -38, -53, -68, -83, -100, -118]) route.push(new THREE.Vector3(x, heightAt(x) + 2, 0));
     const curve = new THREE.CatmullRomCurve3(route);
-    await tween(7, (k) => reply.position.copy(curve.getPointAt(k)), ease.inOut);
+    const tangent = new THREE.Vector3();
+    await tween(7, (k) => {
+      reply.position.copy(curve.getPointAt(k));
+      curve.getTangentAt(Math.min(k, 0.999), tangent);
+      reply.rotation.y = Math.atan2(tangent.x, tangent.z);
+    }, ease.inOut);
     this.ui.showEnd({
       score: this.state.score, max: MAX_SCORE, mistakes: this.state.mistakes, seconds, results: this.state.results, best,
     });
+  }
+
+  // ------------------------------------------------------------ explore mode
+  startExplore(from) {
+    sfx.unlock();
+    document.querySelector(from === 'intro' ? '#intro' : '#end').hidden = true;
+    document.querySelector('#hud').hidden = false;
+    this.state.explore = true;
+    this.state.mode = 'walk';
+    this.cinematicCam = null;
+    for (const gate of this.world.gates.values()) {
+      gate.open = true;
+      gate.raise(1);
+    }
+    for (const f of this.world.ferries.values()) f.group.visible = true;
+    this.updateBeacons();
+    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on an Express platform to ride across the network.');
+    if (from === 'end') this.placeAt(SPAWN.receiver);
+  }
+
+  async ferryAcross() {
+    const from = this.state.side;
+    this.state.mode = 'cinematic';
+    this.moveTarget = null;
+    this.packet.setBits(true);
+    sfx.whoosh();
+    const up = new THREE.Vector3(0, 1.5, 0);
+    const hops = ['GW', 'R1', 'R4', 'SW'].map((id) => nodePosition(id).add(up));
+    if (from === 'receiver') hops.reverse();
+    const edgeOut = NETWORK_EDGE[from].clone().setY(HOVER);
+    const to = from === 'sender' ? 'receiver' : 'sender';
+    const arrive = to === 'receiver' ? SPAWN.receiver.clone() : new THREE.Vector3(-14, 0, 0);
+    arrive.y = heightAt(arrive.x) + HOVER;
+    await this.travel([edgeOut, ...hops, NETWORK_EDGE[to].clone().setY(HOVER), arrive], 22);
+    this.packet.setBits(false);
+    this.state.side = to;
+    this.state.mode = 'walk';
+  }
+
+  toggleQuality() {
+    const high = !this.highQuality;
+    try {
+      localStorage.setItem(QUALITY_KEY, high ? 'high' : 'low');
+    } catch {
+      // storage unavailable: the choice just won't persist
+    }
+    this.quality.auto = false;
+    this.quality.set(high ? Math.min(this.quality.tier, 1) : 2);
+  }
+
+  applyTier(tier, automatic) {
+    const ratio = Math.min(window.devicePixelRatio, tier.ratio);
+    this.renderer.setPixelRatio(ratio);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.post.composer.setPixelRatio(ratio);
+    this.post.setSize(window.innerWidth, window.innerHeight);
+    this.highQuality = tier.bloom;
+    this.world.sun.castShadow = tier.shadows;
+    this.ui.setQuality(tier.bloom, tier.name, this.quality.auto);
+    if (automatic) this.ui.toast(`Graphics set to ${tier.name} to keep the game smooth`);
   }
 
   // ------------------------------------------------------------ router rush
@@ -350,34 +599,53 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- effects
+  // The train derails: engine and wagons tumble off the viaduct and fade.
   async fxShatter() {
     sfx.drop();
-    const origin = this.packet.position.clone();
+    this.shake = 0.6;
+    const cars = this.packet.snapshot();
     this.packet.body.visible = false;
     this.packet.tag.visible = false;
-    const colors = ['#b56cff', '#ff8a3d', '#35d07f', '#3d9bff', '#ffffff'];
-    const shards = Array.from({ length: 36 }, (_, i) => {
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(0.25, 0.25, 0.25),
-        new THREE.MeshBasicMaterial({ color: colors[i % colors.length], transparent: true }),
-      );
+    const dir = new THREE.Vector3(Math.sin(this.packet.heading), 0, Math.cos(this.packet.heading));
+    const side = new THREE.Vector3(dir.z, 0, -dir.x);
+    const mats = [];
+    cars.forEach((c, i) => {
+      c.traverse((o) => {
+        if (!o.material) return;
+        o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
+        for (const m of [o.material].flat()) {
+          m.transparent = true;
+          mats.push(m);
+        }
+      });
+      c.userData.v = dir.clone().multiplyScalar(6 - i).addScaledVector(side, (i % 2 ? 1 : -1) * (2 + Math.random() * 2)).setY(3 + Math.random() * 2);
+      c.userData.spin = new THREE.Vector3(Math.random() * 3, Math.random() * 2, Math.random() * 3);
+      this.scene.add(c);
+    });
+    const origin = this.packet.position.clone();
+    const sparks = Array.from({ length: 30 }, (_, i) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), new THREE.MeshBasicMaterial({ color: i % 2 ? '#ffd27a' : '#ff5d73', transparent: true }));
       m.position.copy(origin);
       m.userData.v = new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 8, (Math.random() - 0.5) * 10);
       this.scene.add(m);
+      mats.push(m.material);
       return m;
     });
     let last = 0;
-    await tween(1.6, (k, raw) => {
-      const dt = (raw - last) * 1.6;
+    await tween(2, (k, raw) => {
+      const dt = (raw - last) * 2;
       last = raw;
-      for (const m of shards) {
-        m.userData.v.y -= 18 * dt;
-        m.position.addScaledVector(m.userData.v, dt);
-        m.rotation.x += dt * 6;
-        m.material.opacity = 1 - raw;
+      for (const c of [...cars, ...sparks]) {
+        c.userData.v.y -= 16 * dt;
+        c.position.addScaledVector(c.userData.v, dt);
+        if (c.userData.spin) {
+          c.rotation.x += c.userData.spin.x * dt;
+          c.rotation.z += c.userData.spin.z * dt;
+        }
       }
+      for (const m of mats) m.opacity = Math.min(1, 1.6 - raw * 1.6);
     }, ease.linear);
-    shards.forEach((m) => this.scene.remove(m));
+    [...cars, ...sparks].forEach((m) => this.scene.remove(m));
   }
 
   async fxHandshake(flag, dir) {
@@ -418,8 +686,17 @@ export class Game {
       const k = e.key.toLowerCase();
       if (k === 'g' && ['walk', 'panel', 'cinematic'].includes(this.state.mode)) this.ui.toggleGlossary();
       if (k === 'escape') this.ui.toggleGlossary(false);
+      if (k === 'm') {
+        this.showMap = !this.showMap;
+        document.getElementById('minimap').hidden = !this.showMap;
+      }
       if (this.ui.glossaryOpen) return;
       if (k === 'e' || k === 'enter') this.tryInteract();
+      if (k === ' ' && this.state.mode === 'walk') {
+        if (this.jump.y === 0) this.jump.v = JUMP_SPEED;
+        e.preventDefault();
+      }
+      if (k === 'shift') this.keys.add('shift');
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
         this.keys.add(k);
         this.moveTarget = null;
@@ -429,6 +706,13 @@ export class Game {
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => this.keys.clear());
 
+    this.touch = new TouchControls({
+      canvas,
+      onJump: () => { if (this.state.mode === 'walk' && this.jump.y === 0) this.jump.v = JUMP_SPEED; },
+      onUse: () => this.tryInteract(),
+      onZoom: (d) => { this.cam.dist = THREE.MathUtils.clamp(this.cam.dist + d, 7, 45); },
+    });
+
     let down = null;
     canvas.addEventListener('pointerdown', (e) => {
       down = { x: e.clientX, y: e.clientY, yaw: this.cam.yaw, pitch: this.cam.pitch, dragged: false };
@@ -436,6 +720,10 @@ export class Game {
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!down) return;
+      if (this.touch.pinching) {
+        down.dragged = true;
+        return;
+      }
       const dx = e.clientX - down.x;
       const dy = e.clientY - down.y;
       if (Math.abs(dx) + Math.abs(dy) > 6) down.dragged = true;
@@ -492,6 +780,12 @@ export class Game {
     if (k.has('s') || k.has('arrowdown')) input.sub(f);
     if (k.has('d') || k.has('arrowright')) input.add(r);
     if (k.has('a') || k.has('arrowleft')) input.sub(r);
+    const stick = this.touch.vec;
+    const push = Math.hypot(stick.x, stick.y);
+    if (push > 0.15) {
+      input.addScaledVector(f, -stick.y).addScaledVector(r, stick.x);
+      this.moveTarget = null;
+    }
 
     const p = this.packet.position;
     if (input.lengthSq() === 0 && this.moveTarget) {
@@ -501,7 +795,11 @@ export class Game {
         input.set(0, 0, 0);
       }
     }
-    if (input.lengthSq() > 0) input.normalize().multiplyScalar(WALK_SPEED * dt);
+    // Keys sprint with shift; the joystick sprints when pushed to the rim.
+    const sprint = k.has('shift') || push > 0.95;
+    const analog = push > 0.15 && input.lengthSq() > 0 ? Math.min(1, push * 1.2) : 1;
+    const speed = WALK_SPEED * (sprint ? SPRINT : analog);
+    if (input.lengthSq() > 0) input.normalize().multiplyScalar(speed * dt);
     this.moveDir = input.clone();
 
     const [minX, maxX] = this.walkBounds();
@@ -511,17 +809,33 @@ export class Game {
     p.x = nx;
     p.z = nz;
 
-    // keep out of the pedestals
-    for (const s of this.world.stations.values()) {
-      const dx = p.x - s.position.x;
-      const dz = p.z - s.position.z;
+    // keep out of the pedestals and scenery
+    const pushOut = (cx, cz, r) => {
+      const dx = p.x - cx;
+      const dz = p.z - cz;
       const d = Math.hypot(dx, dz);
-      if (d < PEDESTAL_RADIUS && d > 0.0001) {
-        p.x = s.position.x + (dx / d) * PEDESTAL_RADIUS;
-        p.z = s.position.z + (dz / d) * PEDESTAL_RADIUS;
+      if (d < r && d > 0.0001) {
+        p.x = cx + (dx / d) * r;
+        p.z = cz + (dz / d) * r;
+      }
+    };
+    for (const s of this.world.stations.values()) pushOut(s.position.x, s.position.z, PEDESTAL_RADIUS);
+    if (this.jump.y < 1.5) for (const c of this.world.colliders) pushOut(c.x, c.z, c.r + 0.5);
+    p.x = THREE.MathUtils.clamp(p.x, minX, maxX);
+
+    this.jump.v -= GRAVITY * dt;
+    this.jump.y = Math.max(0, this.jump.y + this.jump.v * dt);
+    if (this.jump.y === 0) this.jump.v = 0;
+    const ground = heightAt(p.x) + HOVER;
+    p.y = this.jump.y > 0 ? ground + this.jump.y : THREE.MathUtils.lerp(p.y, ground, Math.min(1, dt * 12));
+
+    if (this.state.explore) {
+      const ferry = this.world.ferries.get(this.state.side);
+      if (Math.hypot(p.x - ferry.position.x, p.z - ferry.position.z) < FERRY_RADIUS) {
+        this.ferryAcross();
+        return;
       }
     }
-    p.y = THREE.MathUtils.lerp(p.y, heightAt(p.x) + HOVER, Math.min(1, dt * 12));
 
     for (const orb of this.world.orbs.values()) {
       if (!orb.collected && Math.hypot(p.x - orb.group.position.x, p.z - orb.group.position.z) < ORB_RADIUS) this.collectOrb(orb);
@@ -530,6 +844,7 @@ export class Game {
     const st = this.station;
     const near = st && st.side !== 'network' && this.distanceToStation(st.id) <= INTERACT_RADIUS;
     this.ui.showPrompt(near ? st.title : null);
+    this.touch.setUseReady(!!near);
     this.ui.setActiveLayer(this.layerAt(p.x));
   }
 
@@ -578,31 +893,70 @@ export class Game {
     this.camera.position.lerp(goal.pos, k);
     this.cam.target.lerp(goal.look, k);
     this.camera.lookAt(this.cam.target);
+    if (this.shake > 0.001) {
+      const a = this.shake;
+      this.camera.position.add(new THREE.Vector3((Math.random() - 0.5) * a, (Math.random() - 0.5) * a, (Math.random() - 0.5) * a));
+      this.shake *= Math.exp(-dt * 6);
+    }
+  }
+
+  drawMinimap() {
+    const st = this.station;
+    this.minimap.draw({
+      player: this.packet.position,
+      heading: this.packet.heading,
+      stations: [...this.world.stations.values()],
+      current: st?.id,
+      routers: st?.router,
+      orbs: [...this.world.orbs.values()],
+      ferries: [...this.world.ferries.values()],
+      time: this.time,
+    });
   }
 
   onResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.post.setSize(window.innerWidth, window.innerHeight);
   }
 
   tick() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const realDt = this.clock.getDelta();
+    const dt = Math.min(realDt, 0.05);
+    this.quality.sample(realDt);
     this.time += dt;
     updateTweens(dt);
+    this.particles.update(dt);
+    this.hologram.update(dt, this.time);
     if (this.state.mode === 'walk') this.walk(dt);
     else this.ui.showPrompt(null);
+    if (this.state.mode === 'intro') this.stepAttract(dt);
+    else sfx.setZone(this.layerAt(this.packet.position.x));
+    this.touch.setVisible(this.state.mode === 'walk' && !this.ui.glossaryOpen);
     this.packet.update(dt, this.time, this.moveDir);
     this.world.update(this.time, dt);
     const p = this.packet.position;
-    this.world.sun.position.set(p.x + 25, p.y + 45, p.z + 20);
+    this.world.sun.position.set(p.x + SUN_DIR.x * 60, p.y + 45, p.z + SUN_DIR.z * 60);
     this.world.sun.target.position.copy(p);
     if (this.state.mode === 'rush') {
       const a = this.time * 0.12;
       this.cinematicCam.pos.set(21 + Math.cos(a) * 55, 32, Math.sin(a) * 55);
     }
     this.updateCamera(dt);
-    this.renderer.render(this.scene, this.camera);
+    if (this.showMap && this.state.mode !== 'intro') this.drawMinimap();
+    if (this.highQuality) this.post.composer.render(dt);
+    else this.renderer.render(this.scene, this.camera);
   }
 }
 
+
+function readQuality() {
+  try {
+    const saved = localStorage.getItem(QUALITY_KEY);
+    if (saved) return saved;
+  } catch {
+    // fall through to the default
+  }
+  return null;
+}

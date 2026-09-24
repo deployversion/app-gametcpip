@@ -92,6 +92,7 @@ function routeStep(route, index) {
   return {
     type: 'choice',
     topic: route.topic,
+    route: route.id,
     text: `Destination IP is <b>${NET.server.ip}</b>. Pick the routing table row this router uses.`,
     table: { headers: ['Destination', 'Next hop'] },
     options: route.table.map((row, i) => {
