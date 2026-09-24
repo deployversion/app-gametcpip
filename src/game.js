@@ -116,7 +116,69 @@ export class Game {
   setLayer(layer, fields) {
     this.state.packet = { ...this.state.packet, [layer]: fields };
     this.ui.renderPacket(this.state.packet);
-    this.packet.addLayer(layer);
+    return this.flyPlate(layer, fields, 'in').then(() => {
+      // The header may already have been stripped again while the plate flew.
+      if (this.state.packet[layer]) return this.packet.addLayer(layer);
+      return undefined;
+    });
+  }
+
+  // Where header plates come from: the open station's hologram, or the
+  // router the packet is visiting.
+  plateSource() {
+    const st = STATIONS[this.state.stationIndex];
+    const s = st && this.world.stations.get(st.id);
+    if (s) return s.position.clone().add(new THREE.Vector3(0, 3, 0));
+    const r = st?.router && this.world.routers.get(st.router);
+    if (r) return r.group.position.clone().add(new THREE.Vector3(0, 3, 0));
+    return this.packet.position.clone().add(new THREE.Vector3(0, 6, 0));
+  }
+
+  // A labelled header plate flies onto the packet (encapsulation) or peels
+  // off and drifts away (decapsulation).
+  async flyPlate(layer, fields, dir) {
+    const l = LAYERS[layer];
+    const f = fields ?? {};
+    const summary = {
+      app: () => `GET /cat.png · ${f.proto ?? 'HTTPS'}`,
+      transport: () => `port ${f.srcPort} → ${f.dstPort} · seq ${f.seq}`,
+      internet: () => `${f.src} → ${f.dst} · TTL ${f.ttl}`,
+      link: () => `${f.src} → ${f.dst}`,
+    }[layer]();
+    const title = layer === 'app' ? 'DATA' : `${l.header.toUpperCase()} HEADER`;
+    const text = `${dir === 'in' ? '+ ' : '− '}${title}` + '\n' + summary;
+    const plate = makeLabel(text, { size: 0.55, color: l.color, bg: 'rgba(8,12,34,0.92)', border: l.color });
+    plate.renderOrder = 10;
+    plate.material.depthTest = false;
+    this.scene.add(plate);
+    const baseScale = plate.scale.clone();
+    const target = () => this.packet.position.clone().add(new THREE.Vector3(0, 0.3, 0));
+    if (dir === 'in') {
+      const from = this.plateSource();
+      await tween(0.35, (k) => {
+        plate.position.copy(from);
+        plate.scale.copy(baseScale).multiplyScalar(k);
+      }, ease.back);
+      await wait(0.5);
+      await tween(0.7, (k) => {
+        const to = target();
+        plate.position.lerpVectors(from, to, k);
+        plate.position.y += Math.sin(k * Math.PI) * 2.5;
+        plate.scale.copy(baseScale).multiplyScalar(1 - k * 0.9);
+      }, ease.inOut);
+      this.particles.burst(target(), 18, { color: [l.color, '#ffffff'], speed: 4, up: 1 });
+    } else {
+      const from = target();
+      const away = from.clone().add(new THREE.Vector3(0, 5, 0));
+      await tween(1.3, (k) => {
+        plate.position.lerpVectors(from, away, k);
+        plate.scale.copy(baseScale).multiplyScalar(0.3 + k * 0.7);
+        plate.material.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+      }, ease.out);
+    }
+    this.scene.remove(plate);
+    plate.material.map.dispose();
+    plate.material.dispose();
   }
 
   patchLayer(layer, fields) {
@@ -125,9 +187,10 @@ export class Game {
   }
 
   removeLayer(layer) {
-    const { [layer]: _removed, ...rest } = this.state.packet;
+    const { [layer]: removed, ...rest } = this.state.packet;
     this.state.packet = rest;
     this.ui.renderPacket(this.state.packet);
+    this.flyPlate(layer, removed, 'out');
     return this.packet.removeLayer(layer);
   }
 
@@ -289,9 +352,9 @@ export class Game {
   async flyToNextHop(index, next) {
     this.state.mode = 'cinematic';
     const from = ROUTES[index].id;
-    this.setLayer('link', { ...ROUTES[index].frame, type: 'IPv4', fcs: 'OK' });
     this.ui.setObjective(`Forwarding to ${next === 'SW' ? 'the server LAN' : next}…`);
-    await wait(0.5);
+    await this.setLayer('link', { ...ROUTES[index].frame, type: 'IPv4', fcs: 'OK' });
+    await wait(0.3);
     this.packet.setBits(true);
     sfx.whoosh();
     const up = new THREE.Vector3(0, 1.5, 0);
