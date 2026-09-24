@@ -13,8 +13,11 @@ import { createComposer } from './effects.js';
 
 const QUALITY_KEY = 'packetquest.quality';
 const SPRINT = 1.8;
-const JUMP_SPEED = 9;
-const GRAVITY = 26;
+// Underwater the packet swims: a jump is a slow kick upward, then it sinks.
+const JUMP_SPEED = 8.5;
+const GRAVITY = 11;
+const SONAR_RANGE = 70;
+const SONAR_COOLDOWN = 2.5;
 const FERRY_RADIUS = 1.8;
 
 const BEST_KEY = 'packetquest.bestScore';
@@ -130,6 +133,7 @@ export class Game {
 
   start() {
     sfx.unlock();
+    sfx.ambience();
     this.ui.hideIntro();
     this.state.mode = 'walk';
     this.state.startedAt = performance.now();
@@ -318,7 +322,7 @@ export class Game {
     } catch {
       best = this.state.score;
     }
-    this.cinematicCam = { pos: new THREE.Vector3(10, 70, 110), look: new THREE.Vector3(10, 0, 0) };
+    this.cinematicCam = { pos: new THREE.Vector3(10, 48, 100), look: new THREE.Vector3(10, 0, 0) };
 
     const reply = new THREE.Group();
     const ball = new THREE.Mesh(new THREE.SphereGeometry(1.2, 24, 16), new THREE.MeshStandardMaterial({ color: '#ff6fb5', emissive: '#ff6fb5', emissiveIntensity: 0.9 }));
@@ -341,6 +345,7 @@ export class Game {
   // ------------------------------------------------------------ explore mode
   startExplore(from) {
     sfx.unlock();
+    sfx.ambience();
     document.querySelector(from === 'intro' ? '#intro' : '#end').hidden = true;
     document.querySelector('#hud').hidden = false;
     this.state.explore = true;
@@ -352,7 +357,7 @@ export class Game {
     }
     for (const f of this.world.ferries.values()) f.group.visible = true;
     this.updateBeacons();
-    this.ui.setObjective('Free exploration: roam every layer, hunt the ? orbs, and step on a ferry pad to fly across the network.');
+    this.ui.setObjective('Free exploration: roam every reef, find the ? pearls (Q sends a sonar ping), and step on a current pad to ride across the deep.');
     if (from === 'end') this.placeAt(SPAWN.receiver);
   }
 
@@ -407,6 +412,44 @@ export class Game {
     r.beacon.visible = true;
     await wait(0.5);
     r.beacon.visible = this.station?.router === r.id;
+  }
+
+  // ------------------------------------------------------------------ sonar
+  // Q sends a sonar ping: a ring sweeps out from the packet and every pearl
+  // still hidden within range lights up with a beam for a few seconds.
+  async sonarPing() {
+    if (this.state.mode !== 'walk' || this.time - (this.lastPing ?? -99) < SONAR_COOLDOWN) return;
+    this.lastPing = this.time;
+    sfx.sonar();
+    const p = this.packet.position;
+    const found = [...this.world.orbs.values()]
+      .filter((o) => !o.collected)
+      .map((o) => ({ o, d: Math.hypot(o.group.position.x - p.x, o.group.position.z - p.z) }))
+      .filter(({ d }) => d <= SONAR_RANGE)
+      .sort((a, b) => a.d - b.d);
+    if (found.length) {
+      const { o, d } = found[0];
+      const dir = o.group.position.x > p.x ? 'ahead' : 'behind';
+      this.ui.toast(`Sonar: ${found.length} pearl${found.length > 1 ? 's' : ''} in range, nearest ${Math.round(d)} m ${dir}`);
+    } else {
+      const left = [...this.world.orbs.values()].filter((o) => !o.collected).length;
+      this.ui.toast(left ? 'Sonar: no pearls nearby. Try another layer.' : 'Sonar: you found every pearl!');
+    }
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.97, 1, 96),
+      new THREE.MeshBasicMaterial({ color: '#7ff3ff', transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(p);
+    this.scene.add(ring);
+    for (const { o } of found) o.beacon.visible = true;
+    await tween(1.6, (k) => {
+      ring.scale.setScalar(1 + k * SONAR_RANGE);
+      ring.material.opacity = 1 - k;
+    }, ease.out);
+    this.scene.remove(ring);
+    await wait(3);
+    for (const { o } of found) o.beacon.visible = false;
   }
 
   // ---------------------------------------------------------------- effects
@@ -480,6 +523,7 @@ export class Game {
       if (k === 'escape') this.ui.toggleGlossary(false);
       if (this.ui.glossaryOpen) return;
       if (k === 'e' || k === 'enter') this.tryInteract();
+      if (k === 'q') this.sonarPing();
       if (k === ' ' && this.state.mode === 'walk') {
         if (this.jump.y === 0) this.jump.v = JUMP_SPEED;
         e.preventDefault();
@@ -676,7 +720,8 @@ export class Game {
     if (this.state.mode === 'walk') this.walk(dt);
     else this.ui.showPrompt(null);
     this.packet.update(dt, this.time, this.moveDir);
-    this.world.update(this.time, dt);
+    this.world.update(this.time, dt, this.camera);
+    sfx.setDepth(this.world.depth);
     const p = this.packet.position;
     this.world.sun.position.set(p.x + 25, p.y + 45, p.z + 20);
     this.world.sun.target.position.copy(p);

@@ -64,8 +64,8 @@ export class UI {
   renderGlossary(freshId = null) {
     $('#orb-count').textContent = `${this.collected.size}/${GLOSSARY.length}`;
     $('#glossary-progress').textContent = this.collected.size === GLOSSARY.length
-      ? 'You found every knowledge orb. Nice exploring!'
-      : `${this.collected.size} of ${GLOSSARY.length} found. Walk through the glowing ? orbs to unlock more.`;
+      ? 'You found every knowledge pearl. Nice exploring!'
+      : `${this.collected.size} of ${GLOSSARY.length} found. Swim through the glowing ? pearls to unlock more (Q sends a sonar ping).`;
     $('#glossary-list').innerHTML = GLOSSARY.map((g) => {
       const l = LAYERS[g.layer];
       if (!this.collected.has(g.id)) {
@@ -138,7 +138,7 @@ export class UI {
     const m = Math.floor(seconds / 60);
     const s = String(Math.floor(seconds % 60)).padStart(2, '0');
     const bestText = best > score ? ` · your best: ${best}` : best === score && best > 0 ? ' · new personal best!' : '';
-    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes · ${this.collected.size}/${GLOSSARY.length} orbs${bestText}`;
+    $('#end-detail').textContent = `${mistakes} wrong answer${mistakes === 1 ? '' : 's'} · ${m}:${s} minutes · ${this.collected.size}/${GLOSSARY.length} pearls${bestText}`;
     const chip = (r) => `<span class="topic${r.mistakes ? ' retry' : ''}" style="--c:${LAYERS[r.layer].color}">${r.topic}</span>`;
     const retry = results.filter((r) => r.mistakes);
     $('#end-report').innerHTML = `

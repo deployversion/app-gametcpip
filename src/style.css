@@ -1,7 +1,7 @@
 :root {
-  --bg: #070b22;
-  --glass: rgba(12, 17, 48, 0.82);
-  --line: rgba(160, 180, 255, 0.18);
+  --bg: #03141f;
+  --glass: rgba(4, 26, 40, 0.82);
+  --line: rgba(140, 220, 255, 0.2);
   --text: #eef1ff;
   --muted: #a9b1d8;
   --good: #35d07f;
@@ -22,9 +22,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 
 button { font: inherit; color: inherit; cursor: pointer; }
 button.primary {
-  background: linear-gradient(180deg, #5b7bff, #3a55e0);
+  background: linear-gradient(180deg, #22b8d8, #1478b5);
   border: 0; border-radius: 10px; padding: 10px 20px; font-weight: 700; color: white;
-  box-shadow: 0 6px 18px rgba(58, 85, 224, .35);
+  box-shadow: 0 6px 18px rgba(20, 120, 181, .4);
 }
 button.primary:hover { filter: brightness(1.1); }
 button.primary:disabled { opacity: .5; cursor: default; }

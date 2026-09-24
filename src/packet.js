@@ -5,6 +5,7 @@ import { makeLabel } from './labels.js';
 
 // You are the packet. The avatar is the application data at its core, with
 // one translucent shell per header wrapped around it.
+let BUBBLE_GEO = null;
 const SHELL_SIZE = { transport: 1.35, internet: 1.8, link: 2.3 };
 
 export class PacketAvatar {
@@ -118,6 +119,13 @@ export class PacketAvatar {
     const layers = Object.values(this.shells);
     layers.forEach((s, i) => { s.rotation.y = Math.sin(t * 0.7 + i) * 0.25; });
 
+    // a trail of bubbles while swimming
+    this.bubbleTimer = (this.bubbleTimer ?? 0) - dt;
+    const moving = moveDir && moveDir.lengthSq() > 0.0001;
+    if ((moving || this.bitsMode) && this.bubbleTimer <= 0) {
+      this.bubbleTimer = this.bitsMode ? 0.04 : 0.11;
+      this.spawnBubble();
+    }
     if (this.bitsMode) {
       this.bitTimer -= dt;
       if (this.bitTimer <= 0) {
@@ -128,13 +136,30 @@ export class PacketAvatar {
     for (let i = this.trail.length - 1; i >= 0; i--) {
       const b = this.trail[i];
       b.userData.life -= dt;
-      b.material.opacity = Math.max(0, b.userData.life);
+      if (b.userData.vy) {
+        b.position.y += b.userData.vy * dt;
+        b.position.x += Math.sin(t * 6 + b.userData.vy * 10) * dt * 0.4;
+      }
+      b.material.opacity = Math.max(0, Math.min(b.userData.vy ? 0.6 : 1, b.userData.life));
       if (b.userData.life <= 0) {
         this.scene.remove(b);
         b.material.dispose();
         this.trail.splice(i, 1);
       }
     }
+  }
+
+  spawnBubble() {
+    BUBBLE_GEO ??= new THREE.SphereGeometry(1, 10, 8);
+    const b = new THREE.Mesh(BUBBLE_GEO, new THREE.MeshStandardMaterial({
+      color: '#e6fbff', emissive: '#6fd6ff', emissiveIntensity: 0.4, transparent: true, roughness: 0.05, depthWrite: false,
+    }));
+    b.scale.setScalar(0.06 + Math.random() * 0.12);
+    b.position.copy(this.group.position).add(new THREE.Vector3((Math.random() - 0.5) * 0.9, (Math.random() - 0.3) * 0.8, (Math.random() - 0.5) * 0.9));
+    b.userData.life = 1.4;
+    b.userData.vy = 1.5 + Math.random() * 2;
+    this.scene.add(b);
+    this.trail.push(b);
   }
 
   spawnBit() {
